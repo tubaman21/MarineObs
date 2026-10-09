@@ -375,14 +375,15 @@ def main():
             # Explicitly exclude pure land networks
             LAND_NETWORKS_EXCLUDE = [
                 "MNDOT", "MN_DOT", "WISDOT", "WI_DOT", "WIS_DOT", "RWIS",
-                "WISCONET", "RAWS", "WEATHERXM", "UNION PACIFIC", "UPRR", "XCEL", "CWOP"
+                "WISCONET", "RAWS", "WEATHERXM", "UNION PACIFIC", "UPRR", "XCEL", "CWOP",
+                "IADOT", "IA_DOT", "IOWA"
             ]
             if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
                 if (
                     mnet_id in ["64", "66", "67", "153", "172", "173", "280"]
                     or any(net in mnet_short for net in LAND_NETWORKS_EXCLUDE)
                     or any(net in mnet_name for net in LAND_NETWORKS_EXCLUDE)
-                    or stid.startswith(("DW", "CW", "EW", "FW", "GW", "WCN", "WISC", "WIDOT", "RWIS", "MN", "XL", "UP"))
+                    or stid.startswith(("DW", "CW", "EW", "FW", "GW", "WCN", "WISC", "WIDOT", "RWIS", "MN", "XL", "UP", "IA"))
                 ):
                     continue
 
