@@ -167,37 +167,4 @@ def calculate_dewpoint_f(temp_f, rh_percent):
 def get_wind_barb_index(speed_knots, direction_deg):
     if speed_knots is None or speed_knots < 3 or direction_deg is None:
         return 0, 0
-    idx = max(1, min(26, int(round(speed_knots / 5.0)) + 1))
-    return idx, int(direction_deg)
-
-def get_sky_cover_icon(cloud_cov_str):
-    return 5
-
-def get_obs_val(observations, var_prefixes, index):
-    for key, values in observations.items():
-        if any(prefix in key for prefix in var_prefixes):
-            val = None
-            if isinstance(values, list):
-                if index < len(values):
-                    val = values[index]
-            else:
-                val = values
-            if val is not None:
-                try:
-                    fval = float(val)
-                    if not math.isnan(fval):
-                        return fval
-                except (ValueError, TypeError):
-                    continue
-    return None
-
-def get_best_slp(observations, index, elev_meters, temp_c):
-    raw_p = get_obs_val(observations, ["sea_level_pressure", "altimeter"], index)
-    if raw_p is not None:
-        p_mb = normalize_pressure_to_mb(raw_p)
-        if p_mb and 950.0 <= p_mb <= 1050.0:
-            return p_mb
-
-    stn_p = get_obs_val(observations, ["pressure", "barometric_pressure"], index)
-    if stn_p is not None:
-        p_mb = normalize_pressure_to_mb(
+    idx = max(1, min(26, int(round(speed_kn
