@@ -139,3 +139,21 @@ def format_visibility_str(vis_val):
         return None
     try:
         vis = float(vis_val)
+        if vis > 50.0:
+            vis *= 0.000621371
+            
+        if vis <= 0.125: return "1/8"
+        elif vis <= 0.25: return "1/4"
+        elif vis <= 0.5: return "1/2"
+        elif vis <= 0.75: return "3/4"
+        elif vis < 10.0: return f"{vis:.1f}".rstrip('0').rstrip('.')
+        else: return "10"
+    except Exception:
+        return None
+
+def calculate_dewpoint_f(temp_f, rh_percent):
+    if temp_f is None or rh_percent is None or rh_percent <= 0:
+        return None
+    try:
+        rh_clamped = max(rh_percent, 0.1)
+        temp_c
