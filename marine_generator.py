@@ -47,7 +47,10 @@ MARINE_MNET_IDS = {
     "107",  # NOS / National Ocean Service
     "116",  # GLERL / Great Lakes Environmental Research Laboratory
     "180",  # USACE (Coastal / Port telemetry)
+    "228",  # Marine / Coastal
     "232",  # Voluntary Observing Ship (VOS) / Ships
+    "238",  # Marine
+    "256",  # Maritime / Ships
 }
 
 # Key terms identifying inland, landlocked, or river-only stations to exclude from marine obs
@@ -349,7 +352,7 @@ def main():
                 mnet = "GLERL"
             elif "USCG" in mnet_short or "COAST GUARD" in mnet_name:
                 mnet = "USCG"
-            elif "MARINE" in mnet_short or "MARINE" in mnet_name or "BUOY" in mnet_name:
+            elif mnet_id in MARINE_MNET_IDS or "MARINE" in mnet_short or "MARINE" in mnet_name or "BUOY" in mnet_name:
                 mnet = "Marine"
             else:
                 # Check for marine indicators if not explicitly in a primary marine network
