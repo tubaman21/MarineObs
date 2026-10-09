@@ -18,8 +18,9 @@ except ImportError:
 OUTPUT_DIR = "placefiles"
 OUTPUT_FILE = "marine_observations.txt"
 
+# Geographic Bounding Box for the Great Lakes Basin (Lakes Superior to Ontario)
 LAT_MIN, LAT_MAX = 41.0, 51.5
-LON_MIN, LON_MAX = -98.0, -82.0
+LON_MIN, LON_MAX = -93.0, -75.0
 
 SYNOPTIC_API_URL = "https://api.synopticdata.com/v2/stations/timeseries"
 
@@ -31,8 +32,11 @@ GLOS_OBS_URL = "https://seagull-api.glos.org/api/v1/obs-latest"
 WIND_BARB_ICON_URL = "http://grlevelx.redteamwx.com/10m_wind_barbs.png"
 SKY_COVER_ICON_URL = "https://cdn.jsdelivr.net/gh/ktrue/metar-placefile@master/cloudcover_new.png"
 
-# Set lookback window to 2 hours for looping animation
+# Set lookback window to 2 hours for stationary mesonet/buoy looping animation
 LOOKBACK_HOURS = 2
+
+# Dedicated lookback window for moving vessels (accounts for 3-hour VOS reporting intervals)
+SHIP_LOOKBACK_HOURS = 4
 
 NETWORK_THRESHOLDS = {
     "NDBC": 999,
@@ -46,7 +50,7 @@ NETWORK_THRESHOLDS = {
 
 NETWORK_ORDER = ["NDBC", "GLOS", "Ships (GLOS)", "C-MAN", "NOS-WLON", "Marine"]
 
-# Categorized Whitelist Mapping (Restored Buoys + Stations)
+# Categorized Whitelist Mapping (NDBC Buoys + Fixed Stations)
 WHITELIST_STATION_MAP = {
     # Buoys (NDBC)
     "45194": "NDBC", "45002": "NDBC", "45014": "NDBC", "45210": "NDBC",
@@ -321,21 +325,23 @@ def fetch_glos_ships(network_blocks, now_utc):
 
     features = geojson_data.get("features", [])
     ship_count = 0
-    cutoff_time = now_utc - timedelta(hours=LOOKBACK_HOURS)
+    cutoff_time = now_utc - timedelta(hours=SHIP_LOOKBACK_HOURS)
     fmt = "%Y-%m-%dT%H:%M:%SZ"
 
     for feature in features:
         props = feature.get("properties", {})
         geom = feature.get("geometry", {})
 
-        # Flexible check for ship/vessel designations
-        ship_name = str(props.get("name", "Unknown Vessel"))
+        # Broadened inspection across GLOS metadata fields to identify all vessel types
+        ship_name = str(props.get("name", props.get("title", props.get("label", "Unknown Vessel"))))
         platform_type = str(props.get("platform_type", "")).lower()
+        platform_type_name = str(props.get("platform_type_name", "")).lower()
         node_category = str(props.get("node_category", "")).lower()
+        dataset_type = str(props.get("dataset_type", "")).lower()
         description = str(props.get("description", "")).lower()
 
-        search_str = f"{ship_name} {platform_type} {node_category} {description}".lower()
-        is_ship = any(kw in search_str for kw in ["ship", "vessel", "vos", "freighter", "ferry", "boat", "tug", "barge"])
+        search_str = f"{ship_name} {platform_type} {platform_type_name} {node_category} {dataset_type} {description}".lower()
+        is_ship = any(kw in search_str for kw in ["ship", "vessel", "vos", "freighter", "ferry", "boat", "tug", "barge", "moving"])
 
         if not is_ship:
             continue
@@ -345,7 +351,7 @@ def fetch_glos_ships(network_blocks, now_utc):
 
         lon, lat = geom["coordinates"][0], geom["coordinates"][1]
 
-        # Bounding box filter
+        # Bounding box filter for the Great Lakes Basin
         if not (LAT_MIN <= lat <= LAT_MAX and LON_MIN <= lon <= LON_MAX):
             continue
 
@@ -362,11 +368,11 @@ def fetch_glos_ships(network_blocks, now_utc):
         try:
             dt_ob = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
             if dt_ob < cutoff_time:
-                continue  # Skip observations older than lookback window
+                continue  # Skip observations older than the ship lookback window
 
             # Calculate TimeRange window for looping placefile
             start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
-            end_range = (dt_ob + timedelta(minutes=30)).strftime(fmt)
+            end_range = (dt_ob + timedelta(minutes=45)).strftime(fmt)
             ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
         except Exception:
             continue
@@ -461,7 +467,7 @@ def fetch_glos_ships(network_blocks, now_utc):
         network_blocks.setdefault("Ships (GLOS)", []).extend(station_lines)
         ship_count += 1
 
-    print(f"Successfully processed {ship_count} active ship observations from GLOS Seagull within the {LOOKBACK_HOURS}-hour window.")
+    print(f"Successfully processed {ship_count} active ship observations from GLOS Seagull within the {SHIP_LOOKBACK_HOURS}-hour window.")
 
 # ==========================================
 # MAIN IMPLEMENTATION LOGIC
