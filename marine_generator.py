@@ -230,4 +230,93 @@ def get_pressure_tendency_str(observations, latest_idx, timestamps, elev_meters,
 
         if best_idx is not None:
             past_p = get_best_slp(observations, best_idx, elev_meters, temp_c)
-            if
+            if past_p is not None:
+                diff_mb = current_p - past_p
+                sign = "+" if diff_mb >= 0 else ""
+                return f"{sign}{diff_mb:.1f}mb/3hr"
+    except Exception:
+        pass
+
+    return "N/A"
+
+def get_max_gust_1h(observations, latest_idx, timestamps):
+    if not timestamps or latest_idx >= len(timestamps):
+        return "N/A"
+    try:
+        latest_dt = datetime.strptime(timestamps[latest_idx], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        start_dt = latest_dt - timedelta(hours=1)
+        max_gust_ms = None
+        max_gust_time_str = None
+
+        for i, ts in enumerate(timestamps):
+            dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            if start_dt <= dt <= latest_dt:
+                g_ms = get_obs_val(observations, ["wind_gust"], i)
+                if g_ms is not None:
+                    if max_gust_ms is None or g_ms > max_gust_ms:
+                        max_gust_ms = g_ms
+                        max_gust_time_str = dt.strftime("%H:%MZ")
+
+        if max_gust_ms is not None:
+            max_gust_kt = int(round(max_gust_ms * 1.94384))
+            return f"{max_gust_kt}KT @ {max_gust_time_str}" if max_gust_time_str else f"{max_gust_kt}KT"
+    except Exception:
+        pass
+
+    return "N/A"
+
+def clean_rain_value_to_inches(val):
+    if val is None or math.isnan(val) or val < 0:
+        return 0.0
+    try:
+        val = float(val)
+        if 0.254 <= val < 100.0:
+            return val * 0.0393701
+        elif val >= 100.0:
+            return val / 100.0
+        return val
+    except Exception:
+        return 0.0
+
+# ==========================================
+# MAIN IMPLEMENTATION LOGIC
+# ==========================================
+def main():
+    print("Initializing dynamic telemetry download routine from Synoptic Networks...")
+    
+    api_token = os.environ.get("SYNOPTIC_API_TOKEN")
+    if not api_token:
+        print("Error: SYNOPTIC_API_TOKEN environment variable is missing!")
+        sys.exit(1)
+    
+    run_time = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+    
+    api_params = {
+        "token": api_token,
+        "bbox": f"{LON_MIN},{LAT_MIN},{LON_MAX},{LAT_MAX}",
+        "vars": "air_temp,dew_point_temperature,relative_humidity,wind_speed,wind_direction,wind_gust,sea_level_pressure,altimeter,pressure,visibility,precip_accum,precip_accum_one_hour,precip_accum_24_hour",
+        "varsoperator": "OR",
+        "recent": LOOKBACK_HOURS * 60,
+        "obtimezone": "UTC",
+        "output": "json",
+        "extra": "metadata,mnet,sensor_variables"
+    }
+    
+    # Retry loop for transient Synoptic outages / rate limits
+    data = None
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.get(SYNOPTIC_API_URL, params=api_params, timeout=25)
+            if response.status_code == 200:
+                data = response.json()
+                break
+            else:
+                print(f"Attempt {attempt}/{max_retries}: Synoptic HTTP {response.status_code}. Retrying...")
+        except Exception as e:
+            print(f"Attempt {attempt}/{max_retries}: Network exception ({e}). Retrying...")
+        
+        time.sleep(5 * attempt)
+
+    if not data:
+        print("Warning: Unable to retrieve Synoptic data after retries. Proceeding gracefully
