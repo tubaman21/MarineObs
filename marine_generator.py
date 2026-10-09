@@ -80,7 +80,7 @@ HYDRO_NAME_KEYWORDS = (
 
 EXCLUDE_KEYWORDS = [
     "RIVER", "CREEK", "STREAM", "GAGE", "GAUGE", "DAM", "RESERVOIR", 
-    "DRAIN", "FLUME", "CANAL", "FORK", "SLOUGH", "RAWS", "RWIS", "DOT", "USCRN", "CRN"
+    "DRAIN", "FLUME", "CANAL", "FORK", "SLOUGH", "RAWS", "RWIS", "DOT", "USCRN"
 ]
 
 # Explicitly Whitelisted marine stations
@@ -303,7 +303,6 @@ def main():
     api_params = {
         "token": api_token,
         "bbox": f"{LON_MIN},{LAT_MIN},{LON_MAX},{LAT_MAX}",
-        "mnet": ",".join(sorted(MARINE_MNET_IDS)),
         "recent": LOOKBACK_HOURS * 60,
         "obtimezone": "UTC",
         "output": "json",
@@ -370,13 +369,10 @@ def main():
 
             # Explicitly exclude RAWS stations (including WI RAWS)
             if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
-                if (
-                    mnet_id in ["2", "64", "66", "67", "153", "172", "173", "280"]
-                    or "RAWS" in mnet_short or "RAWS" in mnet_name or "RAWS" in st_name
-                ):
+                if mnet_id in ["2", "64", "66", "67", "153", "172", "173", "280"] or "RAWS" in mnet_short or "RAWS" in mnet_name or "RAWS" in st_name:
                     continue
 
-            # Explicitly exclude USCRN / CRN climate reference stations
+            # Explicitly exclude USCRN / CRN stations
             if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
                 if mnet_id in ["136", "222"] or "USCRN" in mnet_short or "USCRN" in mnet_name or "USCRN" in st_name or " CRN " in f" {st_name} ":
                     continue
@@ -415,6 +411,15 @@ def main():
 
             # Marine classification logic
             is_marine = False
+            
+            is_hydro_gauge = (
+                mnet_id in HYDRO_MNET_IDS
+                or mnet_id in RIVER_GAUGE_MNET_IDS
+                or mnet_short in ["HADS", "USGS", "USACE", "NWS-HYDRO"]
+                or any(kw in st_name for kw in EXCLUDE_KEYWORDS)
+                or any(kw in mnet_name for kw in EXCLUDE_KEYWORDS)
+                or any(kw in f" {mnet_name} " for kw in HYDRO_NAME_KEYWORDS)
+            )
 
             if (
                 mnet_id == "132"
@@ -432,12 +437,11 @@ def main():
                 mnet = "GLOS"
                 is_marine = True
             elif (
-                mnet_id == "235"
-                or "C-MAN" in mnet_short or "CMAN" in mnet_short
-                or "C-MAN" in mnet_name or "CMAN" in mnet_name
+                (mnet_id == "235"
+                or "C-MAN" in mnet_short or "CMAN" in mnet_short or "C-MAN" in mnet_name
                 or stid.endswith(MARINE_SUFFIXES)
-                or raw_stid.endswith(MARINE_SUFFIXES)
-                or mapped_stid.endswith(MARINE_SUFFIXES)
+                or raw_stid.endswith(MARINE_SUFFIXES))
+                and not is_hydro_gauge
             ):
                 mnet = "C-MAN"
                 is_marine = True
@@ -445,7 +449,7 @@ def main():
                 mnet_id in ["117", "234"]
                 or "NDBC" in mnet_short or "NDBC" in mnet_name
                 or raw_stid.startswith("NDBC") or stid.startswith("NDBC")
-                or (len(stid) == 5 and stid.isdigit())
+                or (len(stid) in [5, 7] and stid.isdigit())
             ):
                 mnet = "NDBC"
                 is_marine = True
