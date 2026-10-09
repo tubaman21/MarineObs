@@ -86,7 +86,9 @@ BLACKLIST_STATIONS = set()
 
 STATION_MAP = {}
 
-STATION_COORDINATE_OVERRIDES = {}
+STATION_COORDINATE_OVERRIDES = {
+    "OTNM4": (46.870, -89.330)
+}
 
 # ==========================================
 # UTILITY HELPER FUNCTIONS
