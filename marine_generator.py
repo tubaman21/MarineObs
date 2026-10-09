@@ -435,6 +435,9 @@ def main():
                 mnet_id == "235"
                 or "C-MAN" in mnet_short or "CMAN" in mnet_short
                 or "C-MAN" in mnet_name or "CMAN" in mnet_name
+                or stid.endswith(MARINE_SUFFIXES)
+                or raw_stid.endswith(MARINE_SUFFIXES)
+                or mapped_stid.endswith(MARINE_SUFFIXES)
             ):
                 mnet = "C-MAN"
                 is_marine = True
@@ -442,7 +445,7 @@ def main():
                 mnet_id in ["117", "234"]
                 or "NDBC" in mnet_short or "NDBC" in mnet_name
                 or raw_stid.startswith("NDBC") or stid.startswith("NDBC")
-                or (len(stid) in [5, 7] and stid.isdigit())
+                or (len(stid) == 5 and stid.isdigit())
             ):
                 mnet = "NDBC"
                 is_marine = True
