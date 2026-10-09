@@ -48,6 +48,19 @@ NETWORK_ORDER = ["NDBC", "GLOS", "Ships (GLOS)", "C-MAN", "NOS-WLON", "Marine"]
 
 # Categorized Whitelist Mapping
 WHITELIST_STATION_MAP = {
+    # Buoys (NDBC)
+    "45194": "NDBC", "45002": "NDBC", "45014": "NDBC", "45210": "NDBC",
+    "45013": "NDBC", "45007": "NDBC", "45214": "NDBC", "45187": "NDBC",
+    "45186": "NDBC", "45174": "NDBC", "45198": "NDBC", "45170": "NDBC",
+    "45026": "NDBC", "45168": "NDBC", "45029": "NDBC", "45161": "NDBC",
+    "45024": "NDBC", "45183": "NDBC", "45022": "NDBC", "45162": "NDBC",
+    "45163": "NDBC", "45008": "NDBC", "45209": "NDBC", "45147": "NDBC",
+    "45149": "NDBC", "45143": "NDBC", "45137": "NDBC", "45003": "NDBC",
+    "45212": "NDBC", "45199": "NDBC", "45177": "NDBC", "45175": "NDBC",
+    "45027": "NDBC", "45028": "NDBC", "45001": "NDBC", "45136": "NDBC",
+    "45004": "NDBC", "45213": "NDBC", "45211": "NDBC", "45025": "NDBC",
+    "45023": "NDBC", "45216": "NDBC", "45006": "NDBC", "45219": "NDBC",
+
     # NOS-WLON
     "MACM4": "NOS-WLON", "MNMM4": "NOS-WLON", "KWNW3": "NOS-WLON", "CMTI2": "NOS-WLON",
     "HLNM4": "NOS-WLON", "LDTM4": "NOS-WLON", "LPNM4": "NOS-WLON", "HRBM4": "NOS-WLON",
@@ -72,7 +85,6 @@ WHITELIST_STATION_MAP = {
     "APNM4": "C-MAN", "KNSW3": "C-MAN", "FSTI2": "C-MAN", "OKSI2": "C-MAN",
     "JAKI2": "C-MAN", "WSLM4": "C-MAN", "DISW3": "C-MAN", "ROAM4": "C-MAN",
     "PILM4": "C-MAN", "STDM4": "C-MAN"
-}
 
 BLACKLIST_STATIONS = set()
 STATION_MAP = {}
