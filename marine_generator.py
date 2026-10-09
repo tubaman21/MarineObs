@@ -31,7 +31,8 @@ GLOS_OBS_URL = "https://seagull-api.glos.org/api/v1/obs-latest"
 WIND_BARB_ICON_URL = "http://grlevelx.redteamwx.com/10m_wind_barbs.png"
 SKY_COVER_ICON_URL = "https://cdn.jsdelivr.net/gh/ktrue/metar-placefile@master/cloudcover_new.png"
 
-LOOKBACK_HOURS = 6
+# Set lookback window to 2 hours
+LOOKBACK_HOURS = 2
 
 NETWORK_THRESHOLDS = {
     "NDBC": 999,
@@ -270,10 +271,23 @@ def clean_rain_value_to_inches(val):
     except Exception:
         return 0.0
 
+def extract_glos_param(param_obs, possible_keys):
+    """Extracts a value from GLOS parameter dictionary using string or integer keys."""
+    for key in possible_keys:
+        val_obj = param_obs.get(key) or param_obs.get(str(key))
+        if isinstance(val_obj, dict) and "value" in val_obj and val_obj["value"] is not None:
+            try:
+                fval = float(val_obj["value"])
+                if not math.isnan(fval):
+                    return fval
+            except (ValueError, TypeError):
+                continue
+    return None
+
 # ==========================================
 # GLOS SHIP INGESTION ROUTINE
 # ==========================================
-def fetch_glos_ships(network_blocks):
+def fetch_glos_ships(network_blocks, now_utc):
     """Fetches real-time ship observations from GLOS Seagull and formats them to placefile syntax."""
     print("Fetching live ship observations from GLOS Seagull platform...")
     headers = {"User-Agent": "GRLevelX-Placefile-Script/1.0"}
@@ -294,16 +308,21 @@ def fetch_glos_ships(network_blocks):
 
     features = geojson_data.get("features", [])
     ship_count = 0
+    cutoff_time = now_utc - timedelta(hours=LOOKBACK_HOURS)
 
     for feature in features:
         props = feature.get("properties", {})
         geom = feature.get("geometry", {})
 
-        # Filter strictly for vessels / ships
+        # Flexible check for ship/vessel designations
+        ship_name = str(props.get("name", "Unknown Vessel"))
         platform_type = str(props.get("platform_type", "")).lower()
         node_category = str(props.get("node_category", "")).lower()
-        is_ship = "ship" in platform_type or "vessel" in platform_type or "ship" in node_category or "vessel" in node_category
-        
+        description = str(props.get("description", "")).lower()
+
+        search_str = f"{ship_name} {platform_type} {node_category} {description}".lower()
+        is_ship = any(kw in search_str for kw in ["ship", "vessel", "vos", "freighter", "ferry", "boat", "tug", "barge"])
+
         if not is_ship:
             continue
 
@@ -317,34 +336,34 @@ def fetch_glos_ships(network_blocks):
             continue
 
         dataset_id = str(props.get("id", ""))
-        ship_name = props.get("name", "Unknown Vessel")
-
         latest = obs_data.get(dataset_id)
         if not latest or "parameter_obs" not in latest:
             continue
 
-        param_obs = latest.get("parameter_obs", {})
-
-        # Extract parameters
-        wind_speed_raw = param_obs.get("wind_speed", {}).get("value")
-        wind_dir_raw = param_obs.get("wind_direction", {}).get("value")
-        air_temp_c_raw = param_obs.get("air_temperature", {}).get("value")
-        dew_c_raw = param_obs.get("dew_point", {}).get("value")
-        rh_raw = param_obs.get("relative_humidity", {}).get("value")
-        gust_raw = param_obs.get("wind_gust", {}).get("value")
-        pressure_raw = param_obs.get("barometric_pressure", {}).get("value") or param_obs.get("sea_level_pressure", {}).get("value")
-
-        # Parsing timestamp
-        ob_time_str = "N/A"
+        # Check timestamp against the 2-hour lookback cutoff
         raw_time = latest.get("timestamp")
+        ob_time_str = "N/A"
         if raw_time:
             try:
                 dt_ob = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+                if dt_ob < cutoff_time:
+                    continue  # Skip observations older than 2 hours
                 ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
             except Exception:
                 pass
 
-        # Calculations & Unit Conversions
+        param_obs = latest.get("parameter_obs", {})
+
+        # Extract weather parameters
+        wind_speed_raw = extract_glos_param(param_obs, ["wind_speed", "wind_speed_mps", 1, "1"])
+        wind_dir_raw = extract_glos_param(param_obs, ["wind_direction", "wind_from_direction", 2, "2"])
+        air_temp_c_raw = extract_glos_param(param_obs, ["air_temperature", "air_temp", 179, "179"])
+        dew_c_raw = extract_glos_param(param_obs, ["dew_point", "dew_point_temperature", 3, "3"])
+        rh_raw = extract_glos_param(param_obs, ["relative_humidity", 4, "4"])
+        gust_raw = extract_glos_param(param_obs, ["wind_gust", "wind_speed_of_gust", 5, "5"])
+        pressure_raw = extract_glos_param(param_obs, ["barometric_pressure", "sea_level_pressure", "air_pressure", 6, "6"])
+
+        # Unit Conversions
         temp_f = int(round((air_temp_c_raw * 9 / 5) + 32)) if air_temp_c_raw is not None else None
         dew_f = int(round((dew_c_raw * 9 / 5) + 32)) if dew_c_raw is not None else None
         if dew_f is None and temp_f is not None and rh_raw is not None:
@@ -374,7 +393,6 @@ def fetch_glos_ships(network_blocks):
             f"SLP: {f'{slp_mb:.1f}' if slp_mb else 'M'}mb"
         )
 
-        # Dynamic Color Selection
         color_temp = "255 100 100"
         color_dew  = "100 255 100"
         color_slp  = "255 255 255"
@@ -389,23 +407,19 @@ def fetch_glos_ships(network_blocks):
         station_lines = []
         station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
 
-        # Render Wind Barb
         if speed_kt >= 3 and wind_dir is not None:
             barb_val, rot_angle = get_wind_barb_index(speed_kt, wind_dir)
             if barb_val > 0:
                 station_lines.append("  Color: 255 255 255")
                 station_lines.append(f'  Icon: 0,0,{rot_angle},1,{barb_val},1.25, ""')
 
-        # Station Center Dot
         station_lines.append("  Color: 255 255 255")
         station_lines.append(f'  Icon: 0,0,0,2,5, "{hover_text}"')
 
-        # Render Ship Name / Temperature / Dewpoint / SLP Text Labels
         if tf_display != "M":
             station_lines.append(f"  Color: {color_temp}")
             station_lines.append(f'  Text: -16, 12, 1, "{tf_display}"')
 
-        # Label Vessel Name Above Center Marker
         station_lines.append("  Color: 255 200 0")
         station_lines.append(f'  Text: 0, 22, 1, "{ship_name}"')
 
@@ -427,7 +441,7 @@ def fetch_glos_ships(network_blocks):
         network_blocks.setdefault("Ships (GLOS)", []).extend(station_lines)
         ship_count += 1
 
-    print(f"Successfully processed {ship_count} active ship observations from GLOS Seagull.")
+    print(f"Successfully processed {ship_count} active ship observations from GLOS Seagull within the {LOOKBACK_HOURS}-hour window.")
 
 # ==========================================
 # MAIN IMPLEMENTATION LOGIC
@@ -440,7 +454,9 @@ def main():
         print("Error: SYNOPTIC_API_TOKEN environment variable is missing!")
         sys.exit(1)
     
-    run_time = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+    now_utc = datetime.now(timezone.utc)
+    run_time = now_utc.strftime('%Y-%m-%d %H:%M:%S UTC')
+    cutoff_time = now_utc - timedelta(hours=LOOKBACK_HOURS)
     
     api_params = {
         "token": api_token,
@@ -542,6 +558,11 @@ def main():
             try:
                 fmt = "%Y-%m-%dT%H:%M:%SZ"
                 dt_ob = datetime.strptime(ts_str, fmt).replace(tzinfo=timezone.utc)
+                
+                # Filter out stations with observations older than 2 hours
+                if dt_ob < cutoff_time:
+                    continue
+
                 start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
                 end_range = (dt_ob + timedelta(minutes=90)).strftime(fmt)
                 ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
@@ -678,8 +699,8 @@ def main():
             if station_lines:
                 network_blocks.setdefault(mnet, []).extend(station_lines)
 
-    # Ingest GLOS Ship Observations
-    fetch_glos_ships(network_blocks)
+    # Ingest GLOS Ship Observations with the same 2-hour UTC cutoff
+    fetch_glos_ships(network_blocks, now_utc)
 
     header_lines = [
         "; Created by: Bryan J. Howell and Gemini",
