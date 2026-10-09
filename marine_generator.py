@@ -177,15 +177,19 @@ def get_sky_cover_icon(cloud_cov_str):
 def get_obs_val(observations, var_prefixes, index):
     for key, values in observations.items():
         if any(prefix in key for prefix in var_prefixes):
-            if isinstance(values, list) and index < len(values):
-                val = values[index]
-                if val is not None:
-                    try:
-                        fval = float(val)
-                        if not math.isnan(fval):
-                            return fval
-                    except (ValueError, TypeError):
-                        continue
+            val = None
+            if isinstance(values, list):
+                if index < len(values):
+                    val = values[index]
+            else:
+                val = values
+            if val is not None:
+                try:
+                    fval = float(val)
+                    if not math.isnan(fval):
+                        return fval
+                except (ValueError, TypeError):
+                    continue
     return None
 
 def get_best_slp(observations, index, elev_meters, temp_c):
@@ -354,6 +358,20 @@ def main():
                 if any(kw in padded_name for kw in HYDRO_NAME_KEYWORDS):
                     continue
 
+            # --- Explicit Filtering of Pure Land Surface Networks ---
+            LAND_NETWORKS_EXCLUDE = [
+                "MNDOT", "MN_DOT", "WISDOT", "WI_DOT", "WIS_DOT", "RWIS",
+                "WISCONET", "RAWS", "WEATHERXM", "UNION PACIFIC", "UPRR", "XCEL"
+            ]
+            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
+                if (
+                    mnet_id in ["64", "66", "67", "172", "173", "280"]
+                    or any(net in mnet_short for net in LAND_NETWORKS_EXCLUDE)
+                    or any(net in mnet_name for net in LAND_NETWORKS_EXCLUDE)
+                    or stid.startswith(("WCN", "WISC", "WIDOT", "RWIS", "MN", "XL", "UP"))
+                ):
+                    continue
+
             # --- Marine Classification Logic ---
             is_marine = False
             
@@ -367,7 +385,7 @@ def main():
             elif (
                 mnet_id in ["229", "274"]
                 or "GLOS" in mnet_short or "GLOS" in mnet_name
-                or "GREAT LAKES OBSERVING" in mnet_name
+                or "GREAT LAKES" in mnet_name
                 or stid.startswith("GLOS")
             ):
                 mnet = "GLOS"
@@ -390,29 +408,15 @@ def main():
                 or (len(stid) == 5 and stid.isdigit())  # Standard 5-digit NDBC/WMO Buoy ID
                 or stid.endswith(MARINE_SUFFIXES)
                 or raw_stid.endswith(MARINE_SUFFIXES)
-                or any(kw in mnet_name for kw in ["MARINE", "BUOY", "COASTAL", "MARITIME", "HARBOR", "PIER", "LIGHT"])
-                or any(kw in mnet_short for kw in ["MAR", "BUOY", "COAST"])
+                or any(kw in mnet_name for kw in ["MARINE", "BUOY", "COAST", "MARITIME", "HARBOR", "PIER", "LIGHT", "LAKE", "BAY"])
+                or any(kw in mnet_short for kw in ["MAR", "BUOY", "COAST", "LAKE", "BAY"])
                 or raw_stid in WHITELIST_STATIONS
                 or stid in WHITELIST_STATIONS
             ):
                 mnet = "Marine"
                 is_marine = True
 
-            # Check if land networks match that are not explicitly whitelisted
-            LAND_NETWORKS_EXCLUDE = [
-                "CWOP", "MNDOT", "MN_DOT", "WISDOT", "WI_DOT", "WIS_DOT", "RWIS",
-                "WISCONET", "RAWS", "WEATHERXM", "UNION PACIFIC", "UPRR", "XCEL"
-            ]
-            if not is_marine or (
-                raw_stid not in WHITELIST_STATIONS 
-                and stid not in WHITELIST_STATIONS 
-                and (
-                    mnet_id in ["64", "66", "67", "153", "172", "173", "280"]
-                    or any(net in mnet_short for net in LAND_NETWORKS_EXCLUDE)
-                    or any(net in mnet_name for net in LAND_NETWORKS_EXCLUDE)
-                    or stid.startswith(("DW", "CW", "EW", "FW", "GW", "WCN", "WISC", "WIDOT", "RWIS", "MN", "XL", "UP"))
-                )
-            ):
+            if not is_marine:
                 continue
 
             seen_stations.add(stid)
