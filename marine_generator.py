@@ -16,7 +16,7 @@ except ImportError:
 # CONFIGURATION & PARAMETERS
 # ==========================================
 OUTPUT_DIR = "placefiles"
-OUTPUT_FILE = "marine_observations.txt"
+OUTPUT_FILE = "cwop_observations.txt"
 
 LAT_MIN, LAT_MAX = 42.5, 50.5
 LON_MIN, LON_MAX = -97.5, -86.5
@@ -30,40 +30,66 @@ SKY_COVER_ICON_URL = "https://cdn.jsdelivr.net/gh/ktrue/metar-placefile@master/c
 LOOKBACK_HOURS = 6
 
 NETWORK_THRESHOLDS = {
-    "NDBC": 999,
-    "C-MAN": 999,
-    "NOS": 999,
-    "Ship/Vessel": 999,
-    "GLERL": 999,
-    "USCG": 999,
-    "Marine": 999
+    "RAWS": 999,
+    "MnDOT": 100,
+    "WisDOT": 100,
+    "DOT": 100,
+    "Union Pacific": 80,
+    "Wisconet": 80,
+    "Xcel Energy": 80,
+    "Mesonet": 80,
+    "WeatherXM": 60,
+    "CWOP": 60
 }
 
-NETWORK_ORDER = ["NDBC", "C-MAN", "NOS", "Ship/Vessel", "GLERL", "USCG", "Marine"]
+NETWORK_ORDER = ["RAWS", "MnDOT", "WisDOT", "DOT", "Union Pacific", "Wisconet", "Xcel Energy", "Mesonet", "WeatherXM", "CWOP"]
 
-# Networks explicitly designated for marine, coastal, and vessel telemetry by Synoptic
-MARINE_MNET_IDS = {
-    "106",  # NDBC / National Data Buoy Center
-    "107",  # NOS / National Ocean Service
-    "116",  # GLERL / Great Lakes Environmental Research Laboratory
-    "180",  # USACE (Coastal / Port telemetry)
-    "232",  # Voluntary Observing Ship (VOS) / Ships
+# Suffixes typically assigned to Hydro, C-MAN, and River/Marine sites
+NLI_HYDRO_SUFFIXES = ("M5", "W3", "I4", "N6", "S2", "M4")
+
+# Network IDs explicitly designated for hydrology/water level telemetry by Synoptic
+HYDRO_MNET_IDS = {
+    "128",  # USGS River Gages
+    "130",  # NWS Hydro / HADS
+    "180",  # US Army Corps of Engineers (USACE)
+    "208",  # USBR Hydro
+    "236",  # CoCoRaHS
 }
 
-# Key terms identifying inland, landlocked, or river-only stations to exclude from marine obs
-INLAND_WATER_KEYWORDS = (
-    " RIVER ", " CREEK ", " STREAM ", " POND ", " DRAIN ", " FLUME ", " CANAL "
+# Key terms wrapped in spaces to target water-only gauge metadata safely
+HYDRO_NAME_KEYWORDS = (
+    " RIVER ", " CREEK ", " STREAM ", " LAKE ", " POND ", 
+    " RESERVOIR ", " DAM ", " GAGE ", " DRAIN ", " FLUME ", " CANAL ", " HARBOR ", " PIER "
 )
 
-# Explicitly Whitelisted marine stations
-WHITELIST_STATIONS = set()
+# Explicitly Whitelisted stations bypass hydro/marine suffix checks
+WHITELIST_STATIONS = {
+    "DW8249", "D8249", "EW9591", "E9591", "D6222", "DW6222", 
+    "RWIS-16-0048", "HWDW3", "MRZW3", "SILW3", "WXM6382", "WXM-6382", "WXM_6382", "DW6382",
+    "WSHW3", "GDNW3", "SMRW3", "PLPW3", "DMLW3", "LDYW3", "LNDW3", "AFWW3",
+    "GW2943", "G2943", "DW2470", "D2470", "KB0BDN-13", "SEAM5"
+}
 
 # Explicitly hidden/blacklisted station IDs
-BLACKLIST_STATIONS = set()
+BLACKLIST_STATIONS = {
+    "G1059", "FW9531"
+}
 
-STATION_MAP = {}
+STATION_MAP = {
+    "D8249": "DW8249",
+    "E9591": "EW9591",
+    "F9531": "FW9531",
+    "D6222": "DW6222",
+    "G2943": "GW2943",
+    "D2470": "DW2470"
+}
 
-STATION_COORDINATE_OVERRIDES = {}
+STATION_COORDINATE_OVERRIDES = {
+    "DW8249": (46.212833, -93.379833),
+    "D8249":  (46.212833, -93.379833),
+    "D6222":  (46.778900, -90.789797),
+    "DW6222": (46.778900, -90.789797)
+}
 
 # ==========================================
 # UTILITY HELPER FUNCTIONS
@@ -232,8 +258,8 @@ def get_max_gust_1h(observations, latest_idx, timestamps):
                         max_gust_time_str = dt.strftime("%H:%MZ")
 
         if max_gust_ms is not None:
-            max_gust_mph = int(round(max_gust_ms * 2.23694))
-            return f"{max_gust_mph}MPH @ {max_gust_time_str}" if max_gust_time_str else f"{max_gust_mph}MPH"
+            max_gust_kt = int(round(max_gust_ms * 1.94384))
+            return f"{max_gust_kt}KT @ {max_gust_time_str}" if max_gust_time_str else f"{max_gust_kt}KT"
     except Exception:
         pass
 
@@ -308,7 +334,12 @@ def main():
     if "STATION" in data and data["STATION"]:
         for station in data["STATION"]:
             raw_stid = station.get("STID", "UNKNOWN").upper()
-            mapped_stid = raw_stid
+            
+            # Automatically restore missing 'W' for CWOP stations (e.g., G2943 -> GW2943, D2470 -> DW2470)
+            if len(raw_stid) == 5 and raw_stid[0] in ['C', 'E', 'F', 'G', 'D', 'A', 'K'] and raw_stid[1:].isdigit():
+                mapped_stid = f"{raw_stid[0]}W{raw_stid[1:]}"
+            else:
+                mapped_stid = raw_stid
 
             stid = STATION_MAP.get(raw_stid, STATION_MAP.get(mapped_stid, mapped_stid))
 
@@ -321,40 +352,99 @@ def main():
             mnet_id = str(station.get("MNET_ID", ""))
             mnet_short = str(station.get("MNET_SHORTNAME", "")).upper()
             mnet_name = str(station.get("MNET_NAME", "")).upper()
+            stn_name = str(station.get("NAME", "")).upper()
 
-            # Classify station marine network type
-            if mnet_id == "106" or "NDBC" in mnet_short or "NDBC" in mnet_name or stid.startswith("NDBC"):
-                mnet = "NDBC"
-            elif "C-MAN" in mnet_short or "C-MAN" in mnet_name or "CMAN" in mnet_short:
-                mnet = "C-MAN"
-            elif mnet_id == "107" or "NOS" in mnet_short or "NATIONAL OCEAN SERVICE" in mnet_name:
-                mnet = "NOS"
-            elif mnet_id == "232" or "SHIP" in mnet_short or "VOS" in mnet_short or "SHIP" in mnet_name:
-                mnet = "Ship/Vessel"
-            elif mnet_id == "116" or "GLERL" in mnet_short or "GLERL" in mnet_name:
-                mnet = "GLERL"
-            elif "USCG" in mnet_short or "COAST GUARD" in mnet_name:
-                mnet = "USCG"
-            elif "MARINE" in mnet_short or "MARINE" in mnet_name or "BUOY" in mnet_name:
-                mnet = "Marine"
-            else:
-                # Check for marine indicators if not explicitly in a primary marine network
-                is_marine_by_id = (stid.startswith("NDBC") or (len(stid) == 5 and stid.isdigit()))
-                if is_marine_by_id:
-                    mnet = "NDBC"
-                elif raw_stid in WHITELIST_STATIONS or stid in WHITELIST_STATIONS:
-                    mnet = "Marine"
-                else:
-                    continue  # Filter out land-based stations
+            # Strict hydrological filtering for river gauges
+            if mnet_id in HYDRO_MNET_IDS or mnet_short in ["HADS", "USGS", "USACE", "NWS-HYDRO", "COOP"]:
+                continue
 
-            # Hydrological and Inland Waterway Filtering (exclude inland non-marine water stations)
-            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
-                padded_name = f" {mnet_name} "
-                if any(kw in padded_name for kw in INLAND_WATER_KEYWORDS):
-                    continue
+            padded_name = f" {mnet_name} {stn_name} "
+            if any(kw in padded_name for kw in HYDRO_NAME_KEYWORDS):
+                continue
 
             seen_stations.add(stid)
             seen_stations.add(raw_stid)
+
+            # Classify station network type
+            if (
+                mnet_id == "64" 
+                or "UNION PACIFIC" in mnet_name 
+                or "UNION PACIFIC" in mnet_short 
+                or "UPRR" in mnet_short
+                or stid.startswith("UP")
+            ):
+                mnet = "Union Pacific"
+            elif stid.startswith("XL") or "XCEL" in mnet_short or "XCEL" in mnet_name:
+                mnet = "Xcel Energy"
+            elif (
+                stid.startswith(("WXM", "WXM-", "WXM_")) 
+                or "WEATHERXM" in mnet_name 
+                or "WEATHERXM" in mnet_short
+            ):
+                mnet = "WeatherXM"
+            elif (
+                mnet_id == "280"
+                or "WISCONET" in mnet_short 
+                or "WISCONET" in mnet_name 
+                or "WISCONSIN ENVIRONMENTAL MESONET" in mnet_name
+                or "WISCONSIN MESONET" in mnet_name
+                or stid.startswith(("WCN", "WISC"))
+            ):
+                mnet = "Wisconet"
+            elif (
+                mnet_id == "2" 
+                or "RAWS" in mnet_short 
+                or stid in [
+                    "SILW3", "HWDW3", "MRZW3", "WSHW3", "GDNW3", 
+                    "SMRW3", "PLPW3", "DMLW3", "LDYW3", "LNDW3", "AFWW3"
+                ]
+            ):
+                mnet = "RAWS"
+            elif (
+                raw_stid in WHITELIST_STATIONS
+                or stid in WHITELIST_STATIONS
+                or mnet_id == "153" 
+                or "CWOP" in mnet_short 
+                or "CWOP" in mnet_name
+                or stid.startswith(("DW", "CW", "EW", "FW", "GW"))
+                or "-" in stid
+                or (len(stid) == 5 and stid[0] in ['C', 'E', 'F', 'G', 'W', 'A', 'D', 'K'] and stid[1:].isdigit())
+            ):
+                mnet = "CWOP"
+            elif mnet_id in ["66", "172"] or any(k in mnet_short for k in ["MNDOT", "MN_DOT"]) or "MINNESOTA DOT" in mnet_name or stid.startswith("MN"):
+                mnet = "MnDOT"
+            elif (
+                mnet_id in ["67", "173"] 
+                or any(kw in mnet_short for kw in ["WISDOT", "WI_DOT", "WIS_DOT", "RWIS"]) 
+                or "WISCONSIN DOT" in mnet_name 
+                or stid.startswith(("WIDOT", "RWIS", "WIRT"))
+            ):
+                mnet = "WisDOT"
+            elif "DOT" in mnet_short or "DOT" in mnet_name:
+                mnet = "DOT"
+            elif mnet_short and mnet_short != "UNKNOWN":
+                mnet = mnet_short
+            else:
+                mnet = "Mesonet"
+
+            # Hydrological and Marine Filtering
+            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
+                if mnet_id == "1" or mnet_short in ["NWS/FAA", "ASOS", "AWOS"]:
+                    continue
+
+                if stid.startswith("NDBC") or (len(stid) == 5 and stid.isdigit()):
+                    continue
+
+                if mnet != "RAWS" and (stid.endswith(NLI_HYDRO_SUFFIXES) or raw_stid.endswith(NLI_HYDRO_SUFFIXES)):
+                    continue
+
+                if mnet not in ["CWOP", "RAWS", "Xcel Energy", "Wisconet", "Union Pacific", "WeatherXM"] and mnet_id != "2":
+                    sensor_keys = set(station.get("SENSOR_VARIABLES", {}).keys())
+                    has_weather_sensors = any(
+                        v in sensor_keys for v in ["air_temp", "wind_speed", "relative_humidity"]
+                    )
+                    if not has_weather_sensors:
+                        continue
             
             try:
                 lat = float(station.get("LATITUDE"))
@@ -406,9 +496,8 @@ def main():
             if dew_f is None and temp_f is not None and rh_pct is not None:
                 dew_f = calculate_dewpoint_f(temp_f, rh_pct)
 
-            speed_mph = int(round(speed_ms * 2.23694)) if speed_ms is not None else 0
-            gust_mph = int(round(gust_ms * 2.23694)) if gust_ms is not None else None
             speed_kt = int(round(speed_ms * 1.94384)) if speed_ms is not None else 0
+            gust_kt = int(round(gust_ms * 1.94384)) if gust_ms is not None else None
 
             slp_mb = get_best_slp(observations, latest_idx, elev_meters, temp_c)
             p_tend_str = get_pressure_tendency_str(observations, latest_idx, timestamps, elev_meters, temp_c)
@@ -449,20 +538,20 @@ def main():
             color_rain = "0 255 255"
             color_gust = "255 255 0"
 
-            max_wind_mph = gust_mph if gust_mph is not None else speed_mph
+            max_wind_kt = gust_kt if gust_kt is not None else speed_kt
 
-            if max_wind_mph >= 45:
+            if max_wind_kt >= 39:
                 color_temp = "255 50 255"
-            elif max_wind_mph >= 35:
+            elif max_wind_kt >= 30:
                 color_temp = "255 200 0"
 
             has_gust = (
-                gust_mph is not None 
-                and gust_mph >= 12 
-                and gust_mph > (speed_mph + 3)
+                gust_kt is not None 
+                and gust_kt >= 10 
+                and gust_kt > (speed_kt + 3)
             )
 
-            wind_display = f"{wind_dir_display:03d}@{speed_mph}G{gust_mph}MPH" if has_gust else f"{wind_dir_display:03d}@{speed_mph}MPH"
+            wind_display = f"{wind_dir_display:03d}@{speed_kt}G{gust_kt}KT" if has_gust else f"{wind_dir_display:03d}@{speed_kt}KT"
 
             p1h_hover = f"{p1h_str}\"" if p1h_str else "0.00\""
             p24h_hover = f"{p24h_str}\"" if p24h_str else "0.00\""
@@ -517,7 +606,7 @@ def main():
 
             if has_gust:
                 station_lines.append(f"  Color: {color_gust}")
-                station_lines.append(f'  Text: 0, -20, 1, "G{gust_mph}"')
+                station_lines.append(f'  Text: 0, -20, 1, "G{gust_kt}"')
 
             station_lines.append("End:")
             station_lines.append("")
@@ -527,8 +616,8 @@ def main():
 
     header_lines = [
         "; Created by: Bryan J. Howell and Gemini",
-        "; Last Updated: 10/09/26",
-        f'Title: Marine Surface Observations ({run_time})',
+        "; Last Updated: 10/08/26",
+        f'Title: CWOP Surface Observations ({run_time})',
         "Refresh: 5",
         f'IconFile: 1, 30, 30, 15, 29, "{WIND_BARB_ICON_URL}"',
         f'IconFile: 2, 15, 15, 8, 8, "{SKY_COVER_ICON_URL}"',
@@ -540,7 +629,7 @@ def main():
     processed_nets = set()
     for net in NETWORK_ORDER:
         if net in network_blocks:
-            threshold = NETWORK_THRESHOLDS.get(net, 999)
+            threshold = NETWORK_THRESHOLDS.get(net, 60)
             body_lines.append(f"; --- Network: {net} (Threshold: {threshold} NM) ---")
             body_lines.append(f"Threshold: {threshold}\n")
             body_lines.extend(network_blocks[net])
@@ -548,7 +637,7 @@ def main():
 
     for net, lines in network_blocks.items():
         if net not in processed_nets:
-            threshold = NETWORK_THRESHOLDS.get(net, 999)
+            threshold = NETWORK_THRESHOLDS.get(net, 60)
             body_lines.append(f"; --- Network: {net} (Threshold: {threshold} NM) ---")
             body_lines.append(f"Threshold: {threshold}\n")
             body_lines.extend(lines)
