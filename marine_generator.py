@@ -30,67 +30,40 @@ SKY_COVER_ICON_URL = "https://cdn.jsdelivr.net/gh/ktrue/metar-placefile@master/c
 LOOKBACK_HOURS = 6
 
 NETWORK_THRESHOLDS = {
-    "RAWS": 999,
-    "MnDOT": 100,
-    "WisDOT": 100,
-    "DOT": 100,
-    "Union Pacific": 80,
-    "Wisconet": 80,
-    "Xcel Energy": 80,
-    "Mesonet": 80,
-    "WeatherXM": 60,
-    "CWOP": 60
+    "NDBC": 999,
+    "C-MAN": 999,
+    "NOS": 999,
+    "Ship/Vessel": 999,
+    "GLERL": 999,
+    "USCG": 999,
+    "Marine": 999
 }
 
-NETWORK_ORDER = ["RAWS", "MnDOT", "WisDOT", "DOT", "Union Pacific", "Wisconet", "Xcel Energy", "Mesonet", "WeatherXM", "CWOP"]
+NETWORK_ORDER = ["NDBC", "C-MAN", "NOS", "Ship/Vessel", "GLERL", "USCG", "Marine"]
 
-# Suffixes typically assigned to Hydro, C-MAN, and River/Marine sites
-NLI_HYDRO_SUFFIXES = ("M5", "W3", "I4", "N6", "S2", "M4")
-
-# Network IDs explicitly designated for hydrology/water level telemetry by Synoptic
-HYDRO_MNET_IDS = {
-    "128",  # USGS River Gages
-    "130",  # NWS Hydro / HADS
-    "180",  # US Army Corps of Engineers (USACE)
-    "208",  # USBR Hydro
-    "236",  # CoCoRaHS
+# Networks explicitly designated for marine, coastal, and vessel telemetry by Synoptic
+MARINE_MNET_IDS = {
+    "106",  # NDBC / National Data Buoy Center
+    "107",  # NOS / National Ocean Service
+    "116",  # GLERL / Great Lakes Environmental Research Laboratory
+    "180",  # USACE (Coastal / Port telemetry)
+    "232",  # Voluntary Observing Ship (VOS) / Ships
 }
 
-# Key terms targeting water-only/river gauge metadata strictly
-HYDRO_NAME_KEYWORDS = (
-    "RIVER", "CREEK", "STREAM", "GAGE", "GAUGE", "DRAIN", "FLUME", 
-    "CANAL", "DAM", "SLOUGH", "FLOW", "STAGE", "DISCHARGE", "TAILWATER",
-    "FORK", "BRANCH", "BAYOU", "RUN", "BROOK"
+# Key terms identifying inland, landlocked, or river-only stations to exclude from marine obs
+INLAND_WATER_KEYWORDS = (
+    " RIVER ", " CREEK ", " STREAM ", " POND ", " DRAIN ", " FLUME ", " CANAL "
 )
 
-# Explicitly Whitelisted stations bypass hydro/marine suffix checks
-WHITELIST_STATIONS = {
-    "DW8249", "D8249", "EW9591", "E9591", "D6222", "DW6222", 
-    "RWIS-16-0048", "HWDW3", "MRZW3", "SILW3", "WXM6382", "WXM-6382", "WXM_6382", "DW6382",
-    "WSHW3", "GDNW3", "SMRW3", "PLPW3", "DMLW3", "LDYW3", "LNDW3", "AFWW3",
-    "GW2943", "G2943", "DW2470", "D2470", "KB0BDN-13", "SEAM5"
-}
+# Explicitly Whitelisted marine stations
+WHITELIST_STATIONS = set()
 
 # Explicitly hidden/blacklisted station IDs
-BLACKLIST_STATIONS = {
-    "G1059", "FW9531"
-}
+BLACKLIST_STATIONS = set()
 
-STATION_MAP = {
-    "D8249": "DW8249",
-    "E9591": "EW9591",
-    "F9531": "FW9531",
-    "D6222": "DW6222",
-    "G2943": "GW2943",
-    "D2470": "DW2470"
-}
+STATION_MAP = {}
 
-STATION_COORDINATE_OVERRIDES = {
-    "DW8249": (46.212833, -93.379833),
-    "D8249":  (46.212833, -93.379833),
-    "D6222":  (46.778900, -90.789797),
-    "DW6222": (46.778900, -90.789797)
-}
+STATION_COORDINATE_OVERRIDES = {}
 
 # ==========================================
 # UTILITY HELPER FUNCTIONS
@@ -335,19 +308,18 @@ def main():
     if "STATION" in data and data["STATION"]:
         for station in data["STATION"]:
             raw_stid = station.get("STID", "UNKNOWN").upper()
-            
-            # Automatically restore missing 'W' for CWOP stations (e.g., G2943 -> GW2943, D2470 -> DW2470)
-            if len(raw_stid) == 5 and raw_stid[0] in ['C', 'E', 'F', 'G', 'D', 'A', 'K'] and raw_stid[1:].isdigit():
-                mapped_stid = f"{raw_stid[0]}W{raw_stid[1:]}"
-            else:
-                mapped_stid = raw_stid
+            mapped_stid = raw_stid
 
             stid = STATION_MAP.get(raw_stid, STATION_MAP.get(mapped_stid, mapped_stid))
 
             if raw_stid in BLACKLIST_STATIONS or stid in BLACKLIST_STATIONS:
                 continue
 
-            if stid in seen_stations or raw_stid in seen_stations:
+            # Normalize station IDs for deduplication (strip NDBC prefix to treat e.g. 45006 and NDBC45006 as identical)
+            canon_raw_stid = raw_stid[4:] if raw_stid.startswith("NDBC") else raw_stid
+            canon_stid = stid[4:] if stid.startswith("NDBC") else stid
+
+            if canon_stid in seen_stations or canon_raw_stid in seen_stations or stid in seen_stations or raw_stid in seen_stations:
                 continue
 
             mnet_id = str(station.get("MNET_ID", ""))
@@ -355,24 +327,9 @@ def main():
             mnet_name = str(station.get("MNET_NAME", "")).upper()
             stn_name = str(station.get("NAME", "")).upper()
 
-            # Strict hydrological filtering for river gauges
-            if mnet_id in HYDRO_MNET_IDS or mnet_short in ["HADS", "USGS", "USACE", "NWS-HYDRO", "COOP"]:
-                continue
-
-            combined_metadata = f" {mnet_name} {mnet_short} {stn_name} {stid} "
-            if any(kw in combined_metadata for kw in HYDRO_NAME_KEYWORDS):
-                continue
-
-            # Classify station network type
-            if (
-                mnet_id in ["232", "228", "238", "256"]
-                or "SHIP" in mnet_short 
-                or "VOS" in mnet_short 
-                or "BOAT" in mnet_short
-                or "SHIP" in mnet_name
-                or "VESSEL" in mnet_name
-                or "MARITIME" in mnet_name
-                or stid.startswith(("SHIP", "VOS", "RIG", "PLAT"))
-            ):
-                mnet = "Ship/Vessel"
-            elif (
+            # Classify station marine network type
+            if mnet_id == "106" or "NDBC" in mnet_short or "NDBC" in mnet_name or stid.startswith("NDBC"):
+                mnet = "NDBC"
+            elif "C-MAN" in mnet_short or "C-MAN" in mnet_name or "CMAN" in mnet_short:
+                mnet = "C-MAN"
+            elif mnet_id == "107" or
