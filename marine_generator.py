@@ -16,7 +16,7 @@ except ImportError:
 # CONFIGURATION & PARAMETERS
 # ==========================================
 OUTPUT_DIR = "placefiles"
-OUTPUT_FILE = "cwop_observations.txt"
+OUTPUT_FILE = "marine_observations.txt"
 
 LAT_MIN, LAT_MAX = 42.5, 50.5
 LON_MIN, LON_MAX = -97.5, -86.5
