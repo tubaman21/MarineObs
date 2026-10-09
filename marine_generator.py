@@ -135,4 +135,7 @@ def format_precip_str(precip_in):
     return f"{precip_in:.2f}".lstrip('0') if precip_in < 1.0 else f"{precip_in:.2f}"
 
 def format_visibility_str(vis_val):
-    if vis_val is None or math.isnan(vis_val)
+    if vis_val is None or math.isnan(vis_val):
+        return None
+    try:
+        vis = float(vis_val)
