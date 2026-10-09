@@ -99,11 +99,11 @@ def normalize_pressure_to_mb(val):
         return None
     try:
         val = float(val)
-        if val > 50000:                   # Pascals (Pa)
+        if val > 50000:                     # Pascals (Pa)
             val /= 100.0
-        elif 2800.0 <= val <= 3200.0:     # Hundredths of inHg
+        elif 2800.0 <= val <= 3200.0:       # Hundredths of inHg
             val = (val / 100.0) * 33.8639
-        elif 27.0 <= val <= 32.5:         # Standard inHg
+        elif 27.0 <= val <= 32.5:           # Standard inHg
             val *= 33.8639
         elif 8000.0 <= val <= 11000.0:    # Hundredths of hPa
             val /= 10.0
@@ -319,4 +319,212 @@ def main():
         time.sleep(5 * attempt)
 
     if not data:
-        print("Warning: Unable to retrieve Synoptic data after retries. Proceeding gracefully
+        print("Warning: Unable to retrieve Synoptic data after retries. Proceeding gracefully with empty Synoptic payload.")
+        data = {}
+
+    response_code = data.get("SUMMARY", {}).get("RESPONSE_CODE") or data.get("RESPONSE_CODE")
+    if response_code and response_code != 1:
+        error_msg = data.get("SUMMARY", {}).get("RESPONSE_MESSAGE") or data.get("RESPONSE_MESSAGE")
+        print(f"Warning: Synoptic API Error Code [{response_code}]: {error_msg}")
+
+    network_blocks = {}
+    seen_stations = set()
+    rain_counter = 0
+
+    if "STATION" in data and data["STATION"]:
+        for station in data["STATION"]:
+            raw_stid = station.get("STID", "UNKNOWN").upper()
+            
+            # Automatically restore missing 'W' for CWOP stations (e.g., G2943 -> GW2943, D2470 -> DW2470)
+            if len(raw_stid) == 5 and raw_stid[0] in ['C', 'E', 'F', 'G', 'D', 'A', 'K'] and raw_stid[1:].isdigit():
+                mapped_stid = f"{raw_stid[0]}W{raw_stid[1:]}"
+            else:
+                mapped_stid = raw_stid
+
+            stid = STATION_MAP.get(raw_stid, STATION_MAP.get(mapped_stid, mapped_stid))
+
+            if raw_stid in BLACKLIST_STATIONS or stid in BLACKLIST_STATIONS:
+                continue
+
+            if stid in seen_stations or raw_stid in seen_stations:
+                continue
+
+            mnet_id = str(station.get("MNET_ID", ""))
+            mnet_short = str(station.get("MNET_SHORTNAME", "")).upper()
+            mnet_name = str(station.get("MNET_NAME", "")).upper()
+            stn_name = str(station.get("NAME", "")).upper()
+
+            # Classify station network type
+            if (
+                mnet_id == "64" 
+                or "UNION PACIFIC" in mnet_name 
+                or "UNION PACIFIC" in mnet_short 
+                or "UPRR" in mnet_short
+                or stid.startswith("UP")
+            ):
+                mnet = "Union Pacific"
+            elif stid.startswith("XL") or "XCEL" in mnet_short or "XCEL" in mnet_name:
+                mnet = "Xcel Energy"
+            elif (
+                stid.startswith(("WXM", "WXM-", "WXM_")) 
+                or "WEATHERXM" in mnet_name 
+                or "WEATHERXM" in mnet_short
+            ):
+                mnet = "WeatherXM"
+            elif (
+                mnet_id == "280"
+                or "WISCONET" in mnet_short 
+                or "WISCONET" in mnet_name 
+                or "WISCONSIN ENVIRONMENTAL MESONET" in mnet_name
+                or "WISCONSIN MESONET" in mnet_name
+                or stid.startswith(("WCN", "WISC"))
+            ):
+                mnet = "Wisconet"
+            elif (
+                mnet_id == "2" 
+                or "RAWS" in mnet_short 
+                or stid in [
+                    "SILW3", "HWDW3", "MRZW3", "WSHW3", "GDNW3", 
+                    "SMRW3", "PLPW3", "DMLW3", "LDYW3", "LNDW3", "AFWW3"
+                ]
+            ):
+                mnet = "RAWS"
+            elif (
+                raw_stid in WHITELIST_STATIONS
+                or stid in WHITELIST_STATIONS
+                or mnet_id == "153" 
+                or "CWOP" in mnet_short 
+                or "CWOP" in mnet_name
+                or stid.startswith(("DW", "CW", "EW", "FW", "GW"))
+                or "-" in stid
+                or (len(stid) == 5 and stid[0] in ['C', 'E', 'F', 'G', 'W', 'A', 'D', 'K'] and stid[1:].isdigit())
+            ):
+                mnet = "CWOP"
+            elif mnet_id in ["66", "172"] or any(k in mnet_short for k in ["MNDOT", "MN_DOT"]) or "MINNESOTA DOT" in mnet_name or stid.startswith("MN"):
+                mnet = "MnDOT"
+            elif (
+                mnet_id in ["67", "173"] 
+                or any(kw in mnet_short for kw in ["WISDOT", "WI_DOT", "WIS_DOT", "RWIS"]) 
+                or "WISCONSIN DOT" in mnet_name 
+                or stid.startswith(("WIDOT", "RWIS", "WIRT"))
+            ):
+                mnet = "WisDOT"
+            elif "DOT" in mnet_short or "DOT" in mnet_name:
+                mnet = "DOT"
+            elif mnet_short and mnet_short != "UNKNOWN":
+                mnet = mnet_short
+            else:
+                mnet = "Mesonet"
+
+            # Hydrological and Marine Filtering
+            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
+                if mnet_id == "1" or mnet_short in ["NWS/FAA", "ASOS", "AWOS"]:
+                    continue
+                
+                if mnet_id in HYDRO_MNET_IDS or mnet_short in ["HADS", "USGS", "USACE", "NWS-HYDRO", "COOP"]:
+                    continue
+
+                padded_name = f" {mnet_name} {stn_name} "
+                if any(kw in padded_name for kw in HYDRO_NAME_KEYWORDS):
+                    continue
+
+                if stid.startswith("NDBC") or (len(stid) == 5 and stid.isdigit()):
+                    continue
+
+                if mnet != "RAWS" and (stid.endswith(NLI_HYDRO_SUFFIXES) or raw_stid.endswith(NLI_HYDRO_SUFFIXES)):
+                    continue
+
+                if mnet not in ["CWOP", "RAWS", "Xcel Energy", "Wisconet", "Union Pacific", "WeatherXM"] and mnet_id != "2":
+                    sensor_keys = set(station.get("SENSOR_VARIABLES", {}).keys())
+                    has_weather_sensors = any(
+                        v in sensor_keys for v in ["air_temp", "wind_speed", "relative_humidity"]
+                    )
+                    if not has_weather_sensors:
+                        continue
+
+            seen_stations.add(stid)
+            seen_stations.add(raw_stid)
+            
+            try:
+                lat = float(station.get("LATITUDE"))
+                lon = float(station.get("LONGITUDE"))
+            except (TypeError, ValueError):
+                continue
+
+            elev_meters = None
+            raw_elev = station.get("ELEVATION")
+            if raw_elev is not None:
+                try:
+                    elev_meters = float(raw_elev) * 0.3048
+                except (ValueError, TypeError):
+                    pass
+
+            if stid in STATION_COORDINATE_OVERRIDES:
+                lat, lon = STATION_COORDINATE_OVERRIDES[stid]
+            elif raw_stid in STATION_COORDINATE_OVERRIDES:
+                lat, lon = STATION_COORDINATE_OVERRIDES[raw_stid]
+                
+            observations = station.get("OBSERVATIONS", {})
+            timestamps = observations.get("date_time", [])
+
+            if not timestamps:
+                continue
+
+            latest_idx = len(timestamps) - 1
+            ts_str = timestamps[latest_idx]
+
+            try:
+                dt_ob = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                start_range = (dt_ob - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                end_range = (dt_ob + timedelta(minutes=90)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
+            except Exception:
+                continue
+
+            temp_c = get_obs_val(observations, ["air_temp"], latest_idx)
+            dew_c = get_obs_val(observations, ["dew_point"], latest_idx)
+            rh_pct = get_obs_val(observations, ["relative_humidity"], latest_idx)
+            speed_ms = get_obs_val(observations, ["wind_speed"], latest_idx)
+            gust_ms = get_obs_val(observations, ["wind_gust"], latest_idx)
+            wind_dir = get_obs_val(observations, ["wind_direction"], latest_idx)
+            raw_vis = get_obs_val(observations, ["visibility", "vis"], latest_idx)
+
+            temp_f = int(round((temp_c * 9/5) + 32)) if temp_c is not None else None
+            dew_f = int(round((dew_c * 9/5) + 32)) if dew_c is not None else None
+
+            if dew_f is None and temp_f is not None and rh_pct is not None:
+                dew_f = calculate_dewpoint_f(temp_f, rh_pct)
+
+            speed_kt = int(round(speed_ms * 1.94384)) if speed_ms is not None else 0
+            gust_kt = int(round(gust_ms * 1.94384)) if gust_ms is not None else None
+
+            slp_mb = get_best_slp(observations, latest_idx, elev_meters, temp_c)
+            p_tend_str = get_pressure_tendency_str(observations, latest_idx, timestamps, elev_meters, temp_c)
+            max_gust_1h_str = get_max_gust_1h(observations, latest_idx, timestamps)
+            vis_str = format_visibility_str(raw_vis)
+
+            raw_p1h = get_obs_val(observations, ["precip_accum_one_hour"], latest_idx)
+            raw_p24h = get_obs_val(observations, ["precip_accum_24_hour"], latest_idx)
+            raw_pbucket = get_obs_val(observations, ["precip_accum"], latest_idx)
+
+            p1h_in = clean_rain_value_to_inches(raw_p1h) if raw_p1h is not None else 0.0
+            p24h_in = clean_rain_value_to_inches(raw_p24h) if raw_p24h is not None else 0.0
+
+            p1h_str = format_precip_str(p1h_in)
+            p24h_str = format_precip_str(p24h_in)
+
+            if p1h_str:
+                rain_counter += 1
+
+            sky_code = get_obs_val(observations, ["cloud_layer_1_code"], latest_idx)
+
+            # Quality Control Bounds
+            if temp_f is not None and (temp_f < -50 or temp_f > 130): temp_f = None
+            if dew_f is not None and (dew_f < -60 or dew_f > 100): dew_f = None
+            if temp_f is not None and dew_f is not None and dew_f > temp_f: dew_f = None
+
+            slp_str = sanitize_slp(slp_mb)
+            sky_icon_idx = get_sky_cover_icon(sky_code)
+
+            tf_display = f"{temp_f}" if temp_f is not None else "M"
+            df
