@@ -165,31 +165,4 @@ def calculate_dewpoint_f(temp_f, rh_percent):
     try:
         rh_clamped = max(rh_percent, 0.1)
         temp_c = (temp_f - 32) * 5 / 9
-        a, b = 17.625, 243.04
-        alpha = ((a * temp_c) / (b + temp_c)) + math.log(rh_clamped / 100.0)
-        dew_c = (b * alpha) / (a - alpha)
-        return int(round((dew_c * 9 / 5) + 32))
-    except Exception:
-        return None
-
-def get_wind_barb_index(speed_knots, direction_deg):
-    if speed_knots is None or speed_knots < 3 or direction_deg is None:
-        return 0, 0
-    idx = max(1, min(26, int(round(speed_knots / 5.0)) + 1))
-    return idx, int(direction_deg)
-
-def get_sky_cover_icon(cloud_cov_str):
-    return 5
-
-def get_obs_val(observations, var_prefixes, index):
-    for key, values in observations.items():
-        if any(prefix in key for prefix in var_prefixes):
-            val = None
-            if isinstance(values, list):
-                if index < len(values):
-                    val = values[index]
-            else:
-                val = values
-            if val is not None:
-                try:
-                    fval = float(
+        a, b = 17.625,
