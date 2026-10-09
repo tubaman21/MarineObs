@@ -141,4 +141,15 @@ def format_visibility_str(vis_val):
     try:
         vis = float(vis_val)
         if vis > 50.0:
-            vis *= 0.00062
+            vis *= 0.000621371
+            
+        if vis <= 0.125: return "1/8"
+        elif vis <= 0.25: return "1/4"
+        elif vis <= 0.5: return "1/2"
+        elif vis <= 0.75: return "3/4"
+        elif vis < 10.0: return f"{vis:.1f}".rstrip('0').rstrip('.')
+        else: return "10"
+    except Exception:
+        return None
+
+def calculate_dewpoint_f
