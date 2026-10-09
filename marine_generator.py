@@ -288,12 +288,4 @@ def main():
             else:
                 print(f"Attempt {attempt}/{max_retries}: Synoptic HTTP {response.status_code}. Retrying...")
         except Exception as e:
-            print(f"Attempt {attempt}/{max_retries}: Network exception ({e}). Retrying...")
-        
-        time.sleep(5 * attempt)
-
-    if not data:
-        print("Warning: Unable to retrieve Synoptic data after retries. Proceeding gracefully with empty Synoptic payload.")
-        data = {}
-
-    response_code = data.get("SUMMARY", {}).get("RESPONSE_CODE") or data.get("
+            print(f"Attempt {attempt}/{max_retries}: Network exception ({
