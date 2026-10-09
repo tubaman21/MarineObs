@@ -203,7 +203,8 @@ def get_pressure_tendency_str(observations, latest_idx, timestamps, elev_meters,
         return "N/A"
 
     try:
-        latest_dt = datetime.strptime(timestamps[latest_idx], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        fmt = "%Y-%m-%dT%H:%M:%SZ"
+        latest_dt = datetime.strptime(timestamps[latest_idx], fmt).replace(tzinfo=timezone.utc)
         target_dt = latest_dt - timedelta(hours=3)
         
         best_idx = None
@@ -211,7 +212,7 @@ def get_pressure_tendency_str(observations, latest_idx, timestamps, elev_meters,
         for i, ts in enumerate(timestamps):
             if i == latest_idx:
                 continue
-            dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            dt = datetime.strptime(ts, fmt).replace(tzinfo=timezone.utc)
             diff = abs((dt - target_dt).total_seconds())
             if diff <= 3600:
                 if best_diff is None or diff < best_diff:
@@ -233,4 +234,49 @@ def get_max_gust_1h(observations, latest_idx, timestamps):
     if not timestamps or latest_idx >= len(timestamps):
         return "N/A"
     try:
-        latest_dt = datetime.strptime(timestamps[latest_idx], "%Y-%m-%dT%H
+        fmt = "%Y-%m-%dT%H:%M:%SZ"
+        latest_dt = datetime.strptime(timestamps[latest_idx], fmt).replace(tzinfo=timezone.utc)
+        start_dt = latest_dt - timedelta(hours=1)
+        max_gust_ms = None
+        max_gust_time_str = None
+
+        for i, ts in enumerate(timestamps):
+            dt = datetime.strptime(ts, fmt).replace(tzinfo=timezone.utc)
+            if start_dt <= dt <= latest_dt:
+                g_ms = get_obs_val(observations, ["wind_gust"], i)
+                if g_ms is not None:
+                    if max_gust_ms is None or g_ms > max_gust_ms:
+                        max_gust_ms = g_ms
+                        max_gust_time_str = dt.strftime("%H:%MZ")
+
+        if max_gust_ms is not None:
+            max_gust_kt = int(round(max_gust_ms * 1.94384))
+            return f"{max_gust_kt}KT @ {max_gust_time_str}" if max_gust_time_str else f"{max_gust_kt}KT"
+    except Exception:
+        pass
+
+    return "N/A"
+
+def clean_rain_value_to_inches(val):
+    if val is None or math.isnan(val) or val < 0:
+        return 0.0
+    try:
+        val = float(val)
+        if 0.254 <= val < 100.0:
+            return val * 0.0393701
+        elif val >= 100.0:
+            return val / 100.0
+        return val
+    except Exception:
+        return 0.0
+
+# ==========================================
+# GLOS SHIP INGESTION ROUTINE
+# ==========================================
+def fetch_glos_ships(network_blocks):
+    """Fetches real-time ship observations from GLOS Seagull and formats them to placefile syntax."""
+    print("Fetching live ship observations from GLOS Seagull platform...")
+    headers = {"User-Agent": "GRLevelX-Placefile-Script/1.0"}
+    
+    try:
+        res_geo = requests.get(GLOS_DATASETS_URL, headers=headers, timeout=20)
