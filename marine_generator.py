@@ -122,4 +122,17 @@ def station_pressure_to_slp(station_press_mb, elev_meters, temp_c=15.0):
 
 def sanitize_slp(pressure_mb):
     if pressure_mb is None or math.isnan(pressure_mb) or not (950.0 <= pressure_mb <= 1050.0):
-        return "M
+        return "M"
+    try:
+        val = int(round(pressure_mb * 10))
+        return str(val)[-3:]
+    except Exception:
+        return "M"
+
+def format_precip_str(precip_in):
+    if precip_in is None or math.isnan(precip_in) or precip_in < 0.01:
+        return None
+    return f"{precip_in:.2f}".lstrip('0') if precip_in < 1.0 else f"{precip_in:.2f}"
+
+def format_visibility_str(vis_val):
+    if vis_val is None or math.isnan(vis_val)
