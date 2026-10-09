@@ -1,6 +1,6 @@
 ; Created by: Bryan J. Howell and Gemini
 ; Last Updated: 10/09/26
-Title: Marine Surface Observations (2026-10-09 21:00:21 UTC)
+Title: Marine Surface Observations (2026-10-09 21:13:11 UTC)
 Refresh: 5
 IconFile: 1, 30, 30, 15, 29, "http://grlevelx.redteamwx.com/10m_wind_barbs.png"
 IconFile: 2, 15, 15, 8, 8, "https://cdn.jsdelivr.net/gh/ktrue/metar-placefile@master/cloudcover_new.png"
@@ -206,7 +206,7 @@ Object: 44.98200,-85.83100
   Color: 255 255 255
   Icon: 0,0,70,1,2,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 17:00 UTC | Station: 45183 | Type: NDBC | Temp: 58F | Dewpt: 49F | RH: 72% | Wind: 070@6KT | Peak Gust 1hr: 8KT @ 17:00Z | Vis: N/A | SLP: 1025.5mb | Pres Tend: +0.7mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 17:00 UTC | Station: 45183 | Type: NDBC | Temp: 58F | Dewpt: 49F | RH: 72% | Wind: 070@6KT | Peak Gust 1hr: 8KT @ 17:00Z | Vis: N/A | SLP: 1025.5mb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
   Text: -16, 12, 1, "58"
   Color: 255 255 255
@@ -247,20 +247,18 @@ Object: 45.80400,-84.79200
   Text: -16, 12, 1, "53"
 End:
 
-TimeRange: 2026-10-09T20:25:00Z 2026-10-09T22:00:00Z
+TimeRange: 2026-10-09T20:45:00Z 2026-10-09T22:20:00Z
 Object: 41.90000,-87.60000
   Color: 255 255 255
   Icon: 0,0,100,1,2,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:30 UTC | Station: 45198 | Type: NDBC | Temp: 64F | Dewpt: 55F | RH: 72% | Wind: 100@6G10KT | Peak Gust 1hr: 14KT @ 19:50Z | Vis: N/A | SLP: 1018.4mb | Pres Tend: -1.2mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:50 UTC | Station: 45198 | Type: NDBC | Temp: 65F | Dewpt: 55F | RH: 71% | Wind: 100@6KT | Peak Gust 1hr: 14KT @ 19:50Z | Vis: N/A | SLP: 1018.5mb | Pres Tend: -0.9mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
-  Text: -16, 12, 1, "64"
+  Text: -16, 12, 1, "65"
   Color: 255 255 255
-  Text: 16, 12, 1, "184"
+  Text: 16, 12, 1, "185"
   Color: 100 255 100
   Text: -16, -12, 1, "55"
-  Color: 255 255 0
-  Text: 0, -20, 1, "G10"
 End:
 
 TimeRange: 2026-10-09T19:55:00Z 2026-10-09T21:30:00Z
@@ -313,18 +311,18 @@ Object: 46.86000,-91.93000
   Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 17:30 UTC | Station: 45027 | Type: NDBC | Temp: MF | Dewpt: MF | RH: M | Wind: 060@16KT | Peak Gust 1hr: N/A | Vis: N/A | SLP: Mmb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
 End:
 
-TimeRange: 2026-10-09T17:55:00Z 2026-10-09T19:30:00Z
+TimeRange: 2026-10-09T19:35:00Z 2026-10-09T21:10:00Z
 Object: 46.90000,-89.30000
   Color: 255 255 255
-  Icon: 0,0,30,1,3,1.25, ""
+  Icon: 0,0,80,1,4,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 18:00 UTC | Station: 45216 | Type: NDBC | Temp: 56F | Dewpt: 50F | RH: 82% | Wind: 030@8KT | Peak Gust 1hr: 10KT @ 18:00Z | Vis: N/A | SLP: 1020.3mb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 19:40 UTC | Station: 45216 | Type: NDBC | Temp: 55F | Dewpt: 49F | RH: 82% | Wind: 080@14KT | Peak Gust 1hr: 16KT @ 19:40Z | Vis: N/A | SLP: 1018.6mb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
-  Text: -16, 12, 1, "56"
+  Text: -16, 12, 1, "55"
   Color: 255 255 255
-  Text: 16, 12, 1, "203"
+  Text: 16, 12, 1, "186"
   Color: 100 255 100
-  Text: -16, -12, 1, "50"
+  Text: -16, -12, 1, "49"
 End:
 
 ; --- Network: GLOS (Threshold: 999 NM) ---
@@ -494,16 +492,14 @@ Object: 45.61889,-86.65944
   Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 19:40 UTC | Station: FPTM4 | Type: GLOS | Temp: MF | Dewpt: MF | RH: M | Wind: 166@9KT | Peak Gust 1hr: 12KT @ 19:40Z | Vis: N/A | SLP: Mmb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
 End:
 
-TimeRange: 2026-10-09T20:45:00Z 2026-10-09T22:20:00Z
+TimeRange: 2026-10-09T20:55:00Z 2026-10-09T22:30:00Z
 Object: 42.09889,-86.49417
   Color: 255 255 255
-  Icon: 0,0,213,1,2,1.25, ""
-  Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:50 UTC | Station: SJOM4 | Type: GLOS | Temp: 74F | Dewpt: MF | RH: M | Wind: 213@4KT | Peak Gust 1hr: 5KT @ 20:50Z | Vis: N/A | SLP: 1020.3mb | Pres Tend: -1.4mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 21:00 UTC | Station: SJOM4 | Type: GLOS | Temp: 72F | Dewpt: MF | RH: M | Wind: 213@1KT | Peak Gust 1hr: 6KT @ 20:40Z | Vis: N/A | SLP: 1020.7mb | Pres Tend: -1.7mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
-  Text: -16, 12, 1, "74"
+  Text: -16, 12, 1, "72"
   Color: 255 255 255
-  Text: 16, 12, 1, "203"
+  Text: 16, 12, 1, "207"
 End:
 
 TimeRange: 2026-10-09T19:35:00Z 2026-10-09T21:10:00Z
@@ -528,28 +524,26 @@ Object: 46.82722,-87.72472
   Text: 16, 12, 1, "190"
 End:
 
-TimeRange: 2026-10-09T19:55:00Z 2026-10-09T21:30:00Z
+TimeRange: 2026-10-09T20:55:00Z 2026-10-09T22:30:00Z
 Object: 42.47139,-82.87667
   Color: 255 255 255
-  Icon: 0,0,237,1,2,1.25, ""
-  Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:00 UTC | Station: CLSM4 | Type: GLOS | Temp: 67F | Dewpt: MF | RH: M | Wind: 237@6KT | Peak Gust 1hr: 13KT @ 19:00Z | Vis: N/A | SLP: 1022.7mb | Pres Tend: -1.4mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 21:00 UTC | Station: CLSM4 | Type: GLOS | Temp: 69F | Dewpt: MF | RH: M | Wind: 308@0KT | Peak Gust 1hr: 9KT @ 20:00Z | Vis: N/A | SLP: 1022.7mb | Pres Tend: -1.0mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
-  Text: -16, 12, 1, "67"
+  Text: -16, 12, 1, "69"
   Color: 255 255 255
   Text: 16, 12, 1, "227"
 End:
 
-TimeRange: 2026-10-09T19:55:00Z 2026-10-09T21:30:00Z
+TimeRange: 2026-10-09T20:55:00Z 2026-10-09T22:30:00Z
 Object: 47.17889,-88.24167
   Color: 255 255 255
-  Icon: 0,0,116,1,3,1.25, ""
+  Icon: 0,0,92,1,3,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:00 UTC | Station: GTRM4 | Type: GLOS | Temp: 54F | Dewpt: MF | RH: M | Wind: 116@10KT | Peak Gust 1hr: 11KT @ 20:00Z | Vis: N/A | SLP: 1021.0mb | Pres Tend: -1.0mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 21:00 UTC | Station: GTRM4 | Type: GLOS | Temp: 54F | Dewpt: MF | RH: M | Wind: 092@11KT | Peak Gust 1hr: 13KT @ 20:40Z | Vis: N/A | SLP: 1020.7mb | Pres Tend: -1.0mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
   Text: -16, 12, 1, "54"
   Color: 255 255 255
-  Text: 16, 12, 1, "210"
+  Text: 16, 12, 1, "207"
 End:
 
 TimeRange: 2026-10-09T19:55:00Z 2026-10-09T21:30:00Z
@@ -582,16 +576,16 @@ Object: 46.68389,-85.97556
   Text: 16, 12, 1, "224"
 End:
 
-TimeRange: 2026-10-09T19:45:00Z 2026-10-09T21:20:00Z
+TimeRange: 2026-10-09T20:45:00Z 2026-10-09T22:20:00Z
 Object: 46.87000,-89.33000
   Color: 255 255 255
-  Icon: 0,0,70,1,2,1.25, ""
+  Icon: 0,0,60,1,2,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 19:50 UTC | Station: OTNM4 | Type: GLOS | Temp: 59F | Dewpt: MF | RH: M | Wind: 070@7KT | Peak Gust 1hr: 15KT @ 19:00Z | Vis: N/A | SLP: 1018.6mb | Pres Tend: -2.1mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:50 UTC | Station: OTNM4 | Type: GLOS | Temp: 59F | Dewpt: MF | RH: M | Wind: 060@6G11KT | Peak Gust 1hr: 11KT @ 20:50Z | Vis: N/A | SLP: Mmb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
   Text: -16, 12, 1, "59"
-  Color: 255 255 255
-  Text: 16, 12, 1, "186"
+  Color: 255 255 0
+  Text: 0, -20, 1, "G11"
 End:
 
 TimeRange: 2026-10-09T19:10:00Z 2026-10-09T20:45:00Z
@@ -623,26 +617,26 @@ End:
 ; --- Network: C-MAN (Threshold: 999 NM) ---
 Threshold: 999
 
-TimeRange: 2026-10-09T20:25:00Z 2026-10-09T22:00:00Z
+TimeRange: 2026-10-09T20:45:00Z 2026-10-09T22:20:00Z
 Object: 41.73000,-86.93000
   Color: 255 255 255
   Icon: 0,0,30,1,2,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:30 UTC | Station: MCYI3 | Type: C-MAN | Temp: 68F | Dewpt: 58F | RH: 69% | Wind: 030@3KT | Peak Gust 1hr: 5KT @ 20:10Z | Vis: N/A | SLP: 1018.6mb | Pres Tend: -1.6mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:50 UTC | Station: MCYI3 | Type: C-MAN | Temp: 68F | Dewpt: 60F | RH: 75% | Wind: 030@5KT | Peak Gust 1hr: 5KT @ 20:10Z | Vis: N/A | SLP: 1018.6mb | Pres Tend: -0.9mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
   Text: -16, 12, 1, "68"
   Color: 255 255 255
   Text: 16, 12, 1, "186"
   Color: 100 255 100
-  Text: -16, -12, 1, "58"
+  Text: -16, -12, 1, "60"
 End:
 
-TimeRange: 2026-10-09T20:35:00Z 2026-10-09T22:10:00Z
+TimeRange: 2026-10-09T20:45:00Z 2026-10-09T22:20:00Z
 Object: 45.05000,-83.45000
   Color: 255 255 255
-  Icon: 0,0,360,1,2,1.25, ""
+  Icon: 0,0,50,1,2,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:40 UTC | Station: APNM4 | Type: C-MAN | Temp: 59F | Dewpt: MF | RH: M | Wind: 360@5KT | Peak Gust 1hr: 14KT @ 20:00Z | Vis: N/A | SLP: Mmb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:50 UTC | Station: APNM4 | Type: C-MAN | Temp: 59F | Dewpt: MF | RH: M | Wind: 050@6KT | Peak Gust 1hr: 14KT @ 20:00Z | Vis: N/A | SLP: Mmb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
   Text: -16, 12, 1, "59"
 End:
@@ -657,28 +651,28 @@ Object: 42.40000,-86.29000
   Text: -16, 12, 1, "69"
 End:
 
-TimeRange: 2026-10-09T20:35:00Z 2026-10-09T22:10:00Z
+TimeRange: 2026-10-09T20:45:00Z 2026-10-09T22:20:00Z
 Object: 43.22700,-86.33900
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:40 UTC | Station: MKGM4 | Type: C-MAN | Temp: 62F | Dewpt: 59F | RH: 89% | Wind: 350@1KT | Peak Gust 1hr: 4KT @ 19:40Z | Vis: N/A | SLP: 1020.1mb | Pres Tend: -1.5mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:50 UTC | Station: MKGM4 | Type: C-MAN | Temp: 63F | Dewpt: 58F | RH: 86% | Wind: 000@0KT | Peak Gust 1hr: 4KT @ 19:50Z | Vis: N/A | SLP: 1019.9mb | Pres Tend: -1.7mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
-  Text: -16, 12, 1, "62"
+  Text: -16, 12, 1, "63"
   Color: 255 255 255
-  Text: 16, 12, 1, "201"
+  Text: 16, 12, 1, "199"
   Color: 100 255 100
-  Text: -16, -12, 1, "59"
+  Text: -16, -12, 1, "58"
 End:
 
-TimeRange: 2026-10-09T19:55:00Z 2026-10-09T21:30:00Z
+TimeRange: 2026-10-09T20:55:00Z 2026-10-09T22:30:00Z
 Object: 42.58889,-87.80861
   Color: 255 255 255
-  Icon: 0,0,167,1,2,1.25, ""
+  Icon: 0,0,154,1,4,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:00 UTC | Station: KNSW3 | Type: C-MAN | Temp: 61F | Dewpt: MF | RH: M | Wind: 167@6KT | Peak Gust 1hr: 11KT @ 19:00Z | Vis: N/A | SLP: 1020.3mb | Pres Tend: -1.4mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 21:00 UTC | Station: KNSW3 | Type: C-MAN | Temp: 61F | Dewpt: MF | RH: M | Wind: 154@15KT | Peak Gust 1hr: 17KT @ 21:00Z | Vis: N/A | SLP: 1018.6mb | Pres Tend: -2.4mb/3hr | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
   Text: -16, 12, 1, "61"
   Color: 255 255 255
-  Text: 16, 12, 1, "203"
+  Text: 16, 12, 1, "186"
 End:
 
 TimeRange: 2026-10-09T20:35:00Z 2026-10-09T22:10:00Z
@@ -751,14 +745,14 @@ Object: 47.86700,-89.31300
   Text: -16, 12, 1, "50"
 End:
 
-TimeRange: 2026-10-09T20:25:00Z 2026-10-09T22:00:00Z
+TimeRange: 2026-10-09T20:45:00Z 2026-10-09T22:20:00Z
 Object: 42.00000,-87.50000
   Color: 255 255 255
-  Icon: 0,0,100,1,3,1.25, ""
+  Icon: 0,0,110,1,2,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:30 UTC | Station: CHII2 | Type: C-MAN | Temp: 64F | Dewpt: 54F | RH: 69% | Wind: 100@8KT | Peak Gust 1hr: 10KT @ 19:30Z | Vis: N/A | SLP: Mmb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-09 20:50 UTC | Station: CHII2 | Type: C-MAN | Temp: 65F | Dewpt: 54F | RH: 69% | Wind: 110@6KT | Peak Gust 1hr: 10KT @ 19:50Z | Vis: N/A | SLP: Mmb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
-  Text: -16, 12, 1, "64"
+  Text: -16, 12, 1, "65"
   Color: 100 255 100
   Text: -16, -12, 1, "54"
 End:
