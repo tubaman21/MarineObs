@@ -33,60 +33,52 @@ NETWORK_THRESHOLDS = {
     "NDBC": 999,
     "GLOS": 999,
     "C-MAN": 999,
+    "NOS-WLON": 999,
     "NOS/CO-OPS": 999,
     "Marine": 999
 }
 
-NETWORK_ORDER = ["NDBC", "GLOS", "C-MAN", "NOS/CO-OPS", "Marine"]
+NETWORK_ORDER = ["NDBC", "GLOS", "C-MAN", "NOS-WLON", "Marine"]
 
-# Suffixes typically assigned to C-MAN, Coastal, and Marine sites
-MARINE_SUFFIXES = ("M5", "W3", "N6", "S2", "M4", "O1", "I3", "N7")
+# Categorized Whitelist Mapping
+WHITELIST_STATION_MAP = {
+    # NOS-WLON
+    "MACM4": "NOS-WLON", "MNMM4": "NOS-WLON", "KWNW3": "NOS-WLON", "CMTI2": "NOS-WLON",
+    "HLNM4": "NOS-WLON", "LDTM4": "NOS-WLON", "LPNM4": "NOS-WLON", "HRBM4": "NOS-WLON",
+    "FTGM4": "NOS-WLON", "MBRM4": "NOS-WLON", "AGCM4": "NOS-WLON", "GBWW3": "NOS-WLON",
+    "DULM5": "NOS-WLON", "GDMM5": "NOS-WLON", "LTRM4": "NOS-WLON", "SWPM4": "NOS-WLON",
+    "PTIM4": "NOS-WLON", "MCGM4": "NOS-WLON", "WNEM4": "NOS-WLON", "RCKM4": "NOS-WLON",
+    "DTLM4": "NOS-WLON",
 
-# Network IDs explicitly designated for Marine / Coastal / Buoy telemetry by Synoptic
-MARINE_MNET_IDS = {
-    "117",  # NDBC
-    "132",  # NOS / CO-OPS
-    "229",  # Great Lakes Observing System (GLOS)
-    "230",  # Maritime
-    "231",  # Marine
-    "232",  # Coastal
-    "233",  # Offshore
-    "234",  # Buoy
-    "235",  # C-MAN
-    "256",  # MARACOOS / IOOS Marine Networks
-    "274",  # GLOS Regional
-    "282",  # Marine Mesonet
-    "283",  # Coastal Marine
-    "284"   # Great Lakes Coastal
-}
+    # GLOS
+    "CYGM4": "GLOS", "NABM4": "GLOS", "PNLM4": "GLOS", "FPTM4": "GLOS",
+    "NPDW3": "GLOS", "CBRW3": "GLOS", "PWAW3": "GLOS", "WHRI2": "GLOS",
+    "CNII2": "GLOS", "BSBM4": "GLOS", "MEEM4": "GLOS", "GTLM4": "GLOS",
+    "PRIM4": "GLOS", "SPTM4": "GLOS", "TAWM4": "GLOS", "GSLM4": "GLOS",
+    "SBLM4": "GLOS", "KP58": "GLOS", "PSCM4": "GLOS", "CLSM4": "GLOS",
+    "BHRI3": "GLOS", "SJOM4": "GLOS", "PNGW3": "GLOS", "SLVM5": "GLOS",
+    "WFPM4": "GLOS", "GRMM4": "GLOS", "BIGM4": "GLOS", "GTRM4": "GLOS",
+    "OTNM4": "GLOS", "SXHW3": "GLOS",
 
-# Network IDs explicitly designated for hydrology/water level telemetry by Synoptic (Inland River/Creek Gages)
-HYDRO_MNET_IDS = {
-    "128",  # USGS River Gages
-    "130",  # NWS Hydro / HADS
-    "180",  # US Army Corps of Engineers (USACE)
-    "208",  # USBR Hydro
-    "236",  # CoCoRaHS
-}
+    # Buoys (NDBC)
+    "45194": "NDBC", "45002": "NDBC", "45014": "NDBC", "45210": "NDBC",
+    "45013": "NDBC", "45007": "NDBC", "45214": "NDBC", "45187": "NDBC",
+    "45186": "NDBC", "45174": "NDBC", "45198": "NDBC", "45170": "NDBC",
+    "45026": "NDBC", "45168": "NDBC", "45029": "NDBC", "45161": "NDBC",
+    "45024": "NDBC", "45183": "NDBC", "45022": "NDBC", "45162": "NDBC",
+    "45163": "NDBC", "45008": "NDBC", "45209": "NDBC", "45147": "NDBC",
+    "45149": "NDBC", "45143": "NDBC", "45137": "NDBC", "45003": "NDBC",
+    "45212": "NDBC", "45199": "NDBC", "45177": "NDBC", "45175": "NDBC",
+    "45027": "NDBC", "45028": "NDBC", "45001": "NDBC", "45136": "NDBC",
+    "45004": "NDBC", "45213": "NDBC", "45211": "NDBC", "45025": "NDBC",
+    "45023": "NDBC", "45216": "NDBC", "45006": "NDBC", "45219": "NDBC",
 
-# Specific network IDs for river gauges/HADS/USGS/RAWS that frequently leak into general queries
-RIVER_GAUGE_MNET_IDS = {"2", "128", "130", "180", "208", "236", "64", "66", "67", "153", "172", "173", "280"}
-
-# Key terms wrapped in spaces to target water/river-only gauge metadata safely
-HYDRO_NAME_KEYWORDS = (
-    " RIVER ", " CREEK ", " STREAM ", " POND ", 
-    " RESERVOIR ", " DAM ", " GAGE ", " DRAIN ", " FLUME ", " CANAL "
-)
-
-EXCLUDE_KEYWORDS = [
-    "RIVER", "CREEK", "STREAM", "GAGE", "GAUGE", "DAM", "RESERVOIR", 
-    "DRAIN", "FLUME", "CANAL", "FORK", "SLOUGH", "RAWS", "RWIS", "DOT", "USCRN"
-]
-
-# Explicitly Whitelisted marine stations
-WHITELIST_STATIONS = {
-    "SEAM5", "HWDW3", "MRZW3", "SILW3", "WSHW3", "GDNW3", "SMRW3", 
-    "PLPW3", "DMLW3", "LDYW3", "LNDW3", "AFWW3"
+    # C-MAN
+    "SRLM4": "C-MAN", "SGNW3": "C-MAN", "MLWW3": "C-MAN", "CHII2": "C-MAN",
+    "MCYI3": "C-MAN", "SVNM4": "C-MAN", "MKGM4": "C-MAN", "TBIM4": "C-MAN",
+    "APNM4": "C-MAN", "KNSW3": "C-MAN", "FSTI2": "C-MAN", "OKSI2": "C-MAN",
+    "JAKI2": "C-MAN", "WSLM4": "C-MAN", "DISW3": "C-MAN", "ROAM4": "C-MAN",
+    "PILM4": "C-MAN", "STDM4": "C-MAN"
 }
 
 # Explicitly hidden/blacklisted station IDs
@@ -356,118 +348,17 @@ def main():
             if stid in seen_stations or raw_stid in seen_stations or mapped_stid in seen_stations:
                 continue
 
-            mnet_id = str(station.get("MNET_ID", ""))
-            mnet_short = str(station.get("MNET_SHORTNAME", "")).upper()
-            mnet_name = str(station.get("MNET_NAME", "")).upper()
-            st_name = str(station.get("NAME", "")).upper()
-            sensor_keys = set(station.get("SENSOR_VARIABLES", {}).keys())
+            # Check if station matches Whitelist mapping
+            mnet = None
+            if raw_stid in WHITELIST_STATION_MAP:
+                mnet = WHITELIST_STATION_MAP[raw_stid]
+            elif stid in WHITELIST_STATION_MAP:
+                mnet = WHITELIST_STATION_MAP[stid]
+            elif mapped_stid in WHITELIST_STATION_MAP:
+                mnet = WHITELIST_STATION_MAP[mapped_stid]
 
-            # Explicitly exclude Iowa I4 suffix sites
-            if raw_stid.endswith("I4") or stid.endswith("I4") or mapped_stid.endswith("I4"):
-                if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
-                    continue
-
-            # Explicitly exclude RAWS stations (including WI RAWS)
-            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
-                if mnet_id in ["2", "64", "66", "67", "153", "172", "173", "280"] or "RAWS" in mnet_short or "RAWS" in mnet_name or "RAWS" in st_name:
-                    continue
-
-            # Explicitly exclude USCRN / CRN stations
-            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
-                if mnet_id in ["136", "222"] or "USCRN" in mnet_short or "USCRN" in mnet_name or "USCRN" in st_name or " CRN " in f" {st_name} ":
-                    continue
-
-            # Explicitly exclude river/stream/hydrology gages first
-            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
-                if mnet_id in HYDRO_MNET_IDS or mnet_id in RIVER_GAUGE_MNET_IDS or mnet_short in ["HADS", "USGS", "USACE", "NWS-HYDRO"]:
-                    continue
-
-                if any(kw in st_name for kw in EXCLUDE_KEYWORDS) or any(kw in mnet_name for kw in EXCLUDE_KEYWORDS):
-                    continue
-
-                padded_name = f" {mnet_name} "
-                if any(kw in padded_name for kw in HYDRO_NAME_KEYWORDS):
-                    continue
-
-            # Standard METAR / Airport / ASOS / AWOS filtering (exclude 4-letter ICAO ICAOs starting with K or C)
-            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
-                if len(stid) == 4 and stid.isalpha() and stid[0] in ['K', 'C']:
-                    continue
-
-            # Explicitly exclude pure land networks
-            LAND_NETWORKS_EXCLUDE = [
-                "MNDOT", "MN_DOT", "WISDOT", "WI_DOT", "WIS_DOT", "RWIS",
-                "WISCONET", "RAWS", "WEATHERXM", "UNION PACIFIC", "UPRR", "XCEL", "CWOP",
-                "IADOT", "IA_DOT", "IOWA", "USCRN"
-            ]
-            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
-                if (
-                    mnet_id in ["64", "66", "67", "153", "172", "173", "280"]
-                    or any(net in mnet_short for net in LAND_NETWORKS_EXCLUDE)
-                    or any(net in mnet_name for net in LAND_NETWORKS_EXCLUDE)
-                    or stid.startswith(("DW", "CW", "EW", "FW", "GW", "WCN", "WISC", "WIDOT", "RWIS", "MN", "XL", "UP", "IA"))
-                ):
-                    continue
-
-            # Marine classification logic
-            is_marine = False
-            
-            is_hydro_gauge = (
-                mnet_id in HYDRO_MNET_IDS
-                or mnet_id in RIVER_GAUGE_MNET_IDS
-                or mnet_short in ["HADS", "USGS", "USACE", "NWS-HYDRO"]
-                or any(kw in st_name for kw in EXCLUDE_KEYWORDS)
-                or any(kw in mnet_name for kw in EXCLUDE_KEYWORDS)
-                or any(kw in f" {mnet_name} " for kw in HYDRO_NAME_KEYWORDS)
-            )
-
-            if (
-                mnet_id == "132"
-                or "NOS" in mnet_short or "CO-OPS" in mnet_short or "COOPS" in mnet_short or "WLON" in mnet_short
-                or "NOS" in mnet_name or "CO-OPS" in mnet_name or "WLON" in mnet_name
-            ):
-                mnet = "NOS/CO-OPS"
-                is_marine = True
-            elif (
-                mnet_id in ["229", "274"]
-                or "GLOS" in mnet_short or "GLOS" in mnet_name
-                or "GREAT LAKES" in mnet_name
-                or stid.startswith("GLOS")
-            ):
-                mnet = "GLOS"
-                is_marine = True
-            elif (
-                (mnet_id == "235"
-                or "C-MAN" in mnet_short or "CMAN" in mnet_short or "C-MAN" in mnet_name
-                or stid.endswith(MARINE_SUFFIXES)
-                or raw_stid.endswith(MARINE_SUFFIXES))
-                and not is_hydro_gauge
-            ):
-                mnet = "C-MAN"
-                is_marine = True
-            elif (
-                mnet_id in ["117", "234"]
-                or "NDBC" in mnet_short or "NDBC" in mnet_name
-                or raw_stid.startswith("NDBC") or stid.startswith("NDBC")
-                or (len(stid) in [5, 7] and stid.isdigit())
-            ):
-                mnet = "NDBC"
-                is_marine = True
-            elif (
-                mnet_id in MARINE_MNET_IDS
-                or any(kw in mnet_name for kw in [
-                    "MARINE", "BUOY", "COAST", "MARITIME", "HARBOR", "PIER", 
-                    "LIGHT", "LAKE", "BAY", "ISLAND", "POINT", "PORT", "LOCK", "BREAKWATER"
-                ])
-                or any(kw in mnet_short for kw in ["MAR", "BUOY", "COAST", "LAKE", "BAY"])
-                or any(v in sensor_keys for v in ["sea_surface_temp", "wave_height", "water_level", "sea_surface_temperature"])
-                or raw_stid in WHITELIST_STATIONS
-                or stid in WHITELIST_STATIONS
-            ):
-                mnet = "Marine"
-                is_marine = True
-
-            if not is_marine:
+            # Reject all stations not explicitly whitelisted
+            if not mnet:
                 continue
 
             seen_stations.add(stid)
