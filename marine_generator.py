@@ -70,7 +70,7 @@ HYDRO_MNET_IDS = {
 }
 
 # Specific network IDs for river gauges/HADS/USGS/RAWS that frequently leak into general queries
-RIVER_GAUGE_MNET_IDS = {"2", "128", "130", "180", "208", "236", "64", "66", "67", "153", "172", "173", "280"}
+RIVER_GAUGE_MNET_IDS = {"2", "64", "66", "67", "128", "130", "153", "172", "173", "180", "208", "236", "280"}
 
 # Key terms wrapped in spaces to target water/river-only gauge metadata safely
 HYDRO_NAME_KEYWORDS = (
@@ -362,40 +362,40 @@ def main():
             st_name = str(station.get("NAME", "")).upper()
             sensor_keys = set(station.get("SENSOR_VARIABLES", {}).keys())
 
-            # Explicitly exclude Iowa I4 suffix sites
-            if raw_stid.endswith("I4") or stid.endswith("I4") or mapped_stid.endswith("I4"):
-                if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
+            is_whitelisted = raw_stid in WHITELIST_STATIONS or stid in WHITELIST_STATIONS
+
+            if not is_whitelisted:
+                # 1. Explicitly exclude Iowa I4 suffix sites
+                if raw_stid.endswith("I4") or stid.endswith("I4") or mapped_stid.endswith("I4"):
                     continue
 
-            # Explicitly exclude RAWS stations
-            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
+                # 2. Explicitly exclude RAWS stations (Network ID 2, name/shortname triggers)
                 if mnet_id == "2" or "RAWS" in mnet_short or "RAWS" in mnet_name or "RAWS" in st_name:
                     continue
 
-            # Explicitly exclude river/stream/hydrology gages first
-            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
+                # 3. Explicitly exclude river/stream/hydrology gages by network ID and shortname
                 if mnet_id in HYDRO_MNET_IDS or mnet_id in RIVER_GAUGE_MNET_IDS or mnet_short in ["HADS", "USGS", "USACE", "NWS-HYDRO"]:
+                    continue
+
+                # 4. Filter by word-bounded keywords or padded text in station and network names
+                padded_st_name = f" {st_name} "
+                padded_mnet_name = f" {mnet_name} "
+                if any(kw in padded_st_name for kw in HYDRO_NAME_KEYWORDS) or any(kw in padded_mnet_name for kw in HYDRO_NAME_KEYWORDS):
                     continue
 
                 if any(kw in st_name for kw in EXCLUDE_KEYWORDS) or any(kw in mnet_name for kw in EXCLUDE_KEYWORDS):
                     continue
 
-                padded_name = f" {mnet_name} "
-                if any(kw in padded_name for kw in HYDRO_NAME_KEYWORDS):
-                    continue
-
-            # Standard METAR / Airport / ASOS / AWOS filtering (exclude 4-letter ICAO ICAOs starting with K or C)
-            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
+                # 5. Standard METAR / Airport / ASOS / AWOS filtering (exclude 4-letter ICAOs starting with K or C)
                 if len(stid) == 4 and stid.isalpha() and stid[0] in ['K', 'C']:
                     continue
 
-            # Explicitly exclude pure land networks
-            LAND_NETWORKS_EXCLUDE = [
-                "MNDOT", "MN_DOT", "WISDOT", "WI_DOT", "WIS_DOT", "RWIS",
-                "WISCONET", "RAWS", "WEATHERXM", "UNION PACIFIC", "UPRR", "XCEL", "CWOP",
-                "IADOT", "IA_DOT", "IOWA"
-            ]
-            if raw_stid not in WHITELIST_STATIONS and stid not in WHITELIST_STATIONS:
+                # 6. Explicitly exclude pure land/road networks
+                LAND_NETWORKS_EXCLUDE = [
+                    "MNDOT", "MN_DOT", "WISDOT", "WI_DOT", "WIS_DOT", "RWIS",
+                    "WISCONET", "RAWS", "WEATHERXM", "UNION PACIFIC", "UPRR", "XCEL", "CWOP",
+                    "IADOT", "IA_DOT", "IOWA"
+                ]
                 if (
                     mnet_id in ["64", "66", "67", "153", "172", "173", "280"]
                     or any(net in mnet_short for net in LAND_NETWORKS_EXCLUDE)
@@ -406,15 +406,7 @@ def main():
 
             # Marine classification logic
             is_marine = False
-            
-            is_hydro_gauge = (
-                mnet_id in HYDRO_MNET_IDS
-                or mnet_id in RIVER_GAUGE_MNET_IDS
-                or mnet_short in ["HADS", "USGS", "USACE", "NWS-HYDRO"]
-                or any(kw in st_name for kw in EXCLUDE_KEYWORDS)
-                or any(kw in mnet_name for kw in EXCLUDE_KEYWORDS)
-                or any(kw in f" {mnet_name} " for kw in HYDRO_NAME_KEYWORDS)
-            )
+            mnet = "Marine"
 
             if (
                 mnet_id == "132"
@@ -424,11 +416,10 @@ def main():
                 mnet = "NOS/CO-OPS"
                 is_marine = True
             elif (
-                (mnet_id == "235"
+                mnet_id == "235"
                 or "C-MAN" in mnet_short or "CMAN" in mnet_short or "C-MAN" in mnet_name
                 or stid.endswith(MARINE_SUFFIXES)
-                or raw_stid.endswith(MARINE_SUFFIXES))
-                and not is_hydro_gauge
+                or raw_stid.endswith(MARINE_SUFFIXES)
             ):
                 mnet = "C-MAN"
                 is_marine = True
@@ -456,8 +447,7 @@ def main():
                 ])
                 or any(kw in mnet_short for kw in ["MAR", "BUOY", "COAST", "LAKE", "BAY"])
                 or any(v in sensor_keys for v in ["sea_surface_temp", "wave_height", "water_level", "sea_surface_temperature"])
-                or raw_stid in WHITELIST_STATIONS
-                or stid in WHITELIST_STATIONS
+                or is_whitelisted
             ):
                 mnet = "Marine"
                 is_marine = True
