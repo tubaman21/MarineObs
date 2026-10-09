@@ -198,30 +198,4 @@ def get_pressure_tendency_str(observations, latest_idx, timestamps, elev_meters,
             dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
             diff = abs((dt - target_dt).total_seconds())
             if diff <= 3600:
-                if best_diff is None or diff < best_diff:
-                    best_diff = diff
-                    best_idx = i
-
-        if best_idx is not None:
-            past_p = get_best_slp(observations, best_idx, elev_meters, temp_c)
-            if past_p is not None:
-                diff_mb = current_p - past_p
-                sign = "+" if diff_mb >= 0 else ""
-                return f"{sign}{diff_mb:.1f}mb/3hr"
-    except Exception:
-        pass
-
-    return "N/A"
-
-def get_max_gust_1h(observations, latest_idx, timestamps):
-    if not timestamps or latest_idx >= len(timestamps):
-        return "N/A"
-    try:
-        latest_dt = datetime.strptime(timestamps[latest_idx], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-        start_dt = latest_dt - timedelta(hours=1)
-        max_gust_ms = None
-        max_gust_time_str = None
-
-        for i, ts in enumerate(timestamps):
-            dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-            if
+                if
