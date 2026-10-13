@@ -767,7 +767,7 @@ def main():
     header_lines = [
         "; Created by: Bryan J. Howell and Gemini",
         "; Last Updated: 10/13/26",
-        f'Title: Marine Surface Observations ({run_time})',
+        f'Title: Marine Observations ({run_time})',
         "Refresh: 5",
         f'IconFile: 1, 30, 30, 15, 29, "{WIND_BARB_ICON_URL}"',
         f'IconFile: 2, 15, 15, 8, 8, "{SKY_COVER_ICON_URL}"',
