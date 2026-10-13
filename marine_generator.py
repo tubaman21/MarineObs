@@ -334,10 +334,6 @@ def fetch_glos_ships(network_blocks, now_utc):
     vessels = ship_data if isinstance(ship_data, list) else ship_data.get("ships", ship_data.get("features", []))
     print(f"Retrieved {len(vessels)} total ship dataset records.")
 
-    if vessels and len(vessels) > 0:
-        sample_vessel = vessels[0]
-        print(f"[DEBUG NWS Sample Record] {json.dumps(sample_vessel)[:300]}")
-
     ship_count = 0
     skipped_old = 0
     skipped_bbox = 0
@@ -353,174 +349,187 @@ def fetch_glos_ships(network_blocks, now_utc):
 
         ship_name = str(props.get("name") or props.get("ship_name") or props.get("id") or props.get("callsign") or "Unknown Vessel")
 
-        # Extract coordinates
-        lat, lon = None, None
-        if geom and isinstance(geom, dict) and geom.get("coordinates"):
-            lon, lat = geom["coordinates"][0], geom["coordinates"][1]
-        else:
-            try:
-                lat = float(props.get("lat") or props.get("latitude"))
-                lon = float(props.get("lon") or props.get("longitude"))
-            except (TypeError, ValueError):
+        # Iterate through nested ISO timestamp objects in properties
+        obs_entries = []
+        for pkey, pval in props.items():
+            if isinstance(pval, dict) and ("T" in pkey or "-" in pkey):
+                obs_entries.append((pkey, pval))
+
+        if not obs_entries:
+            # Fallback for flat dictionary formats
+            obs_entries = [("flat", props)]
+
+        for raw_time, obs in obs_entries:
+            if not isinstance(obs, dict):
                 continue
 
-        if lat is None or lon is None:
-            continue
+            # Extract coordinates
+            lat, lon = None, None
+            if "lat" in obs and "lon" in obs:
+                try:
+                    lat = float(obs["lat"])
+                    lon = float(obs["lon"])
+                except (TypeError, ValueError):
+                    pass
+            elif geom and isinstance(geom, dict) and geom.get("coordinates"):
+                lon, lat = geom["coordinates"][0], geom["coordinates"][1]
 
-        # Adjust Western Hemisphere positive longitude notation to negative format
-        if lon > 0 and 70.0 <= lon <= 100.0:
-            lon = -lon
+            if lat is None or lon is None:
+                continue
 
-        # Bounding box filter for the Great Lakes Basin
-        if not (LAT_MIN <= lat <= LAT_MAX and LON_MIN <= lon <= LON_MAX):
-            skipped_bbox += 1
-            continue
+            # Adjust Western Hemisphere positive longitude notation
+            if lon > 0 and 70.0 <= lon <= 100.0:
+                lon = -lon
 
-        # Extract and robustly parse timestamp across common date formats
-        raw_time = props.get("time") or props.get("timestamp") or props.get("date_time") or props.get("datetime")
-        if not raw_time:
-            continue
+            # Bounding box filter for the Great Lakes Basin
+            if not (LAT_MIN <= lat <= LAT_MAX and LON_MIN <= lon <= LON_MAX):
+                skipped_bbox += 1
+                continue
 
-        dt_ob = None
-        try:
-            if isinstance(raw_time, (int, float)):
-                ts_val = float(raw_time)
-                if ts_val > 1e11:  # Convert milliseconds to seconds
-                    ts_val /= 1000.0
-                dt_ob = datetime.fromtimestamp(ts_val, tz=timezone.utc)
-            else:
-                str_time = str(raw_time).strip()
-                for time_fmt in [
-                    "%Y-%m-%d %H:%M:%S",
-                    "%Y-%m-%d %H:%M",
-                    "%Y-%m-%dT%H:%M:%SZ",
-                    "%Y-%m-%dT%H:%M:%S",
-                    "%Y/%m/%d %H:%M:%S"
-                ]:
-                    try:
-                        dt_ob = datetime.strptime(str_time, time_fmt).replace(tzinfo=timezone.utc)
-                        break
-                    except ValueError:
-                        pass
-
-                if dt_ob is None:
-                    raw_time_str = str_time.replace("Z", "+00:00")
-                    dt_ob = datetime.fromisoformat(raw_time_str)
+            # Parse observation timestamp
+            dt_ob = None
+            try:
+                time_str = str(raw_time if raw_time != "flat" else obs.get("time", "")).strip()
+                if time_str:
+                    time_str_iso = time_str.replace("Z", "+00:00")
+                    dt_ob = datetime.fromisoformat(time_str_iso)
                     if dt_ob.tzinfo is None:
                         dt_ob = dt_ob.replace(tzinfo=timezone.utc)
 
-            if dt_ob is None or (dt_ob.tzinfo and dt_ob < cutoff_time):
+                if dt_ob is None or dt_ob < cutoff_time:
+                    skipped_old += 1
+                    continue
+
+                start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
+                end_range = (dt_ob + timedelta(hours=2, minutes=30)).strftime(fmt)
+                ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
+            except Exception:
                 skipped_old += 1
                 continue
 
-            start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
-            end_range = (dt_ob + timedelta(hours=2, minutes=30)).strftime(fmt)
-            ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
-        except Exception as e:
-            print(f"Error parsing date string '{raw_time}': {e}")
-            continue
+            # Weather values (handles NWS V-FF wind, V-T Kelvin temp, V-SLP pressure in Pa)
+            temp_raw = obs.get("V-T") or obs.get("temp") or obs.get("air_temp")
+            dew_raw = obs.get("V-TD") or obs.get("dewp") or obs.get("dew_point")
+            speed_raw = obs.get("V-FF") or obs.get("wspd") or obs.get("wind_speed")
+            gust_raw = obs.get("gust") or obs.get("wind_gust")
+            wind_dir_raw = obs.get("V-DD") or obs.get("wdir") or obs.get("wind_dir")
+            slp_raw = obs.get("V-SLP") or obs.get("slp") or obs.get("pressure")
 
-        # Weather values
-        temp_f = props.get("temp") or props.get("air_temp") or props.get("temperature")
-        dew_f = props.get("dewp") or props.get("dew_point") or props.get("dewpoint")
-        speed_kt = props.get("wspd") or props.get("wind_speed") or props.get("speed")
-        gust_kt = props.get("gust") or props.get("wind_gust")
-        wind_dir = props.get("wdir") or props.get("wind_dir") or props.get("direction")
-        slp_mb = props.get("slp") or props.get("pressure") or props.get("baro")
-
-        try:
-            temp_f = int(round(float(temp_f))) if temp_f is not None else None
-        except (ValueError, TypeError):
             temp_f = None
+            if temp_raw is not None:
+                try:
+                    t_val = float(temp_raw)
+                    if t_val > 200.0:  # Kelvin to Fahrenheit
+                        temp_f = int(round((t_val - 273.15) * 9 / 5 + 32))
+                    else:
+                        temp_f = int(round(t_val))
+                except (ValueError, TypeError):
+                    pass
 
-        try:
-            dew_f = int(round(float(dew_f))) if dew_f is not None else None
-        except (ValueError, TypeError):
             dew_f = None
+            if dew_raw is not None:
+                try:
+                    d_val = float(dew_raw)
+                    if d_val > 200.0:  # Kelvin to Fahrenheit
+                        dew_f = int(round((d_val - 273.15) * 9 / 5 + 32))
+                    else:
+                        dew_f = int(round(d_val))
+                except (ValueError, TypeError):
+                    pass
 
-        try:
-            speed_kt = int(round(float(speed_kt))) if speed_kt is not None else 0
-        except (ValueError, TypeError):
             speed_kt = 0
+            if speed_raw is not None:
+                try:
+                    sp_val = float(speed_raw)
+                    if sp_val < 100.0 and obs.get("V-FF") is not None:  # m/s to knots
+                        speed_kt = int(round(sp_val * 1.94384))
+                    else:
+                        speed_kt = int(round(sp_val))
+                except (ValueError, TypeError):
+                    pass
 
-        try:
-            gust_kt = int(round(float(gust_kt))) if gust_kt is not None else None
-        except (ValueError, TypeError):
             gust_kt = None
+            if gust_raw is not None:
+                try:
+                    gust_kt = int(round(float(gust_raw)))
+                except (ValueError, TypeError):
+                    pass
 
-        try:
-            wind_dir = round(float(wind_dir)) if wind_dir is not None else None
-        except (ValueError, TypeError):
             wind_dir = None
+            if wind_dir_raw is not None:
+                try:
+                    wind_dir = round(float(wind_dir_raw))
+                except (ValueError, TypeError):
+                    pass
 
-        slp_mb = normalize_pressure_to_mb(slp_mb)
-        slp_str = sanitize_slp(slp_mb)
+            slp_mb = normalize_pressure_to_mb(slp_raw)
+            slp_str = sanitize_slp(slp_mb)
 
-        tf_display = f"{temp_f}" if temp_f is not None else "M"
-        df_display = f"{dew_f}" if dew_f is not None else "M"
-        wind_dir_display = int(wind_dir) if wind_dir is not None else 0
+            tf_display = f"{temp_f}" if temp_f is not None else "M"
+            df_display = f"{dew_f}" if dew_f is not None else "M"
+            wind_dir_display = int(wind_dir) if wind_dir is not None else 0
 
-        has_gust = (
-            gust_kt is not None
-            and gust_kt >= 10
-            and gust_kt > (speed_kt + 3)
-        )
-        wind_display = f"{wind_dir_display:03d}@{speed_kt}G{gust_kt}KT" if has_gust else f"{wind_dir_display:03d}@{speed_kt}KT"
+            has_gust = (
+                gust_kt is not None
+                and gust_kt >= 10
+                and gust_kt > (speed_kt + 3)
+            )
+            wind_display = f"{wind_dir_display:03d}@{speed_kt}G{gust_kt}KT" if has_gust else f"{wind_dir_display:03d}@{speed_kt}KT"
 
-        hover_text = (
-            f"Obs Time: {ob_time_str} | Ship: {ship_name} | Type: VOS/Freighter | "
-            f"Temp: {tf_display}F | Dewpt: {df_display}F | Wind: {wind_display} | "
-            f"SLP: {f'{slp_mb:.1f}' if slp_mb else 'M'}mb"
-        )
+            hover_text = (
+                f"Obs Time: {ob_time_str} | Ship: {ship_name} | Type: VOS/Freighter | "
+                f"Temp: {tf_display}F | Dewpt: {df_display}F | Wind: {wind_display} | "
+                f"SLP: {f'{slp_mb:.1f}' if slp_mb else 'M'}mb"
+            )
 
-        color_temp = "255 100 100"
-        color_dew  = "100 255 100"
-        color_slp  = "255 255 255"
-        color_gust = "255 255 0"
+            color_temp = "255 100 100"
+            color_dew  = "100 255 100"
+            color_slp  = "255 255 255"
+            color_gust = "255 255 0"
 
-        max_wind_kt = gust_kt if gust_kt is not None else speed_kt
-        if max_wind_kt >= 39:
-            color_temp = "255 50 255"
-        elif max_wind_kt >= 30:
-            color_temp = "255 200 0"
+            max_wind_kt = gust_kt if gust_kt is not None else speed_kt
+            if max_wind_kt >= 39:
+                color_temp = "255 50 255"
+            elif max_wind_kt >= 30:
+                color_temp = "255 200 0"
 
-        station_lines = []
-        station_lines.append(f"TimeRange: {start_range} {end_range}")
-        station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
+            station_lines = []
+            station_lines.append(f"TimeRange: {start_range} {end_range}")
+            station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
 
-        if speed_kt >= 3 and wind_dir is not None:
-            barb_val, rot_angle = get_wind_barb_index(speed_kt, wind_dir)
-            if barb_val > 0:
-                station_lines.append("  Color: 255 255 255")
-                station_lines.append(f'  Icon: 0,0,{rot_angle},1,{barb_val},1.25, ""')
+            if speed_kt >= 3 and wind_dir is not None:
+                barb_val, rot_angle = get_wind_barb_index(speed_kt, wind_dir)
+                if barb_val > 0:
+                    station_lines.append("  Color: 255 255 255")
+                    station_lines.append(f'  Icon: 0,0,{rot_angle},1,{barb_val},1.25, ""')
 
-        station_lines.append("  Color: 255 255 255")
-        station_lines.append(f'  Icon: 0,0,0,2,5, "{hover_text}"')
+            station_lines.append("  Color: 255 255 255")
+            station_lines.append(f'  Icon: 0,0,0,2,5, "{hover_text}"')
 
-        if tf_display != "M":
-            station_lines.append(f"  Color: {color_temp}")
-            station_lines.append(f'  Text: -16, 12, 1, "{tf_display}"')
+            if tf_display != "M":
+                station_lines.append(f"  Color: {color_temp}")
+                station_lines.append(f'  Text: -16, 12, 1, "{tf_display}"')
 
-        station_lines.append("  Color: 255 200 0")
-        station_lines.append(f'  Text: 0, 22, 1, "{ship_name}"')
+            station_lines.append("  Color: 255 200 0")
+            station_lines.append(f'  Text: 0, 22, 1, "{ship_name}"')
 
-        if slp_str != "M":
-            station_lines.append(f"  Color: {color_slp}")
-            station_lines.append(f'  Text: 16, 12, 1, "{slp_str}"')
+            if slp_str != "M":
+                station_lines.append(f"  Color: {color_slp}")
+                station_lines.append(f'  Text: 16, 12, 1, "{slp_str}"')
 
-        if df_display != "M":
-            station_lines.append(f"  Color: {color_dew}")
-            station_lines.append(f'  Text: -16, -12, 1, "{df_display}"')
+            if df_display != "M":
+                station_lines.append(f"  Color: {color_dew}")
+                station_lines.append(f'  Text: -16, -12, 1, "{df_display}"')
 
-        if has_gust:
-            station_lines.append(f"  Color: {color_gust}")
-            station_lines.append(f'  Text: 0, -20, 1, "G{gust_kt}"')
+            if has_gust:
+                station_lines.append(f"  Color: {color_gust}")
+                station_lines.append(f'  Text: 0, -20, 1, "G{gust_kt}"')
 
-        station_lines.append("End:")
-        station_lines.append("")
+            station_lines.append("End:")
+            station_lines.append("")
 
-        network_blocks.setdefault("Ships (GLOS)", []).extend(station_lines)
-        ship_count += 1
+            network_blocks.setdefault("Ships (GLOS)", []).extend(station_lines)
+            ship_count += 1
 
     print(f"NWS Ship inspection breakdown: {skipped_bbox} out of bbox, {skipped_old} older than cutoff.")
     print(f"Successfully processed {ship_count} active ship observations from NWS Duluth within the {SHIP_LOOKBACK_HOURS}-hour window.")
