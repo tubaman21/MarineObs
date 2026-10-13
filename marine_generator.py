@@ -363,6 +363,10 @@ def fetch_glos_ships(network_blocks, now_utc):
         if lat is None or lon is None:
             continue
 
+        # Adjust Western Hemisphere positive longitude notation to negative format
+        if lon > 0 and 70.0 <= lon <= 100.0:
+            lon = -lon
+
         # Bounding box filter for the Great Lakes Basin
         if not (LAT_MIN <= lat <= LAT_MAX and LON_MIN <= lon <= LON_MAX):
             skipped_bbox += 1
@@ -401,7 +405,7 @@ def fetch_glos_ships(network_blocks, now_utc):
                     if dt_ob.tzinfo is None:
                         dt_ob = dt_ob.replace(tzinfo=timezone.utc)
 
-            if dt_ob is None or dt_ob < cutoff_time:
+            if dt_ob is None or (dt_ob.tzinfo and dt_ob < cutoff_time):
                 skipped_old += 1
                 continue
 
