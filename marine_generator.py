@@ -626,41 +626,29 @@ def main():
             if not timestamps:
                 continue
 
-            # Select only the single most recent observation frame for all stationary stations
-            best_idx = None
-            latest_dt = None
+            # Parse and sort all valid timestamps within the lookback window
+            valid_obs = []
             for idx, ts_str in enumerate(timestamps):
                 try:
                     dt_ob = datetime.strptime(ts_str, fmt).replace(tzinfo=timezone.utc)
                     if dt_ob >= cutoff_time:
-                        if latest_dt is None or dt_ob > latest_dt:
-                            latest_dt = dt_ob
-                            best_idx = idx
+                        valid_obs.append((dt_ob, idx))
                 except Exception:
                     continue
 
-            if best_idx is not None:
-                target_indices = [best_idx]
-            else:
-                target_indices = []
+            valid_obs.sort(key=lambda item: item[0])
 
-            # Process single latest frame for stationary stations
-            for idx in target_indices:
-                ts_str = timestamps[idx]
-                try:
-                    dt_ob = datetime.strptime(ts_str, fmt).replace(tzinfo=timezone.utc)
-                    
-                    # Filter observations outside the 4-hour window
-                    if dt_ob < cutoff_time:
-                        continue
-
-                    # Define start and end range for this specific observation timestamp
-                    start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
+            # Process all valid frames in sequence, linking each frame's end_range to the next observation
+            for i, (dt_ob, idx) in enumerate(valid_obs):
+                start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
+                
+                if i < len(valid_obs) - 1:
+                    next_dt, _ = valid_obs[i + 1]
+                    end_range = next_dt.strftime(fmt)
+                else:
                     end_range = (now_utc + timedelta(hours=3)).strftime(fmt)
 
-                    ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
-                except Exception:
-                    continue
+                ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
 
                 temp_c = get_obs_val(observations, ["air_temp"], idx)
                 dew_c = get_obs_val(observations, ["dew_point"], idx)
