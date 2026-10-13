@@ -24,9 +24,8 @@ LON_MIN, LON_MAX = -93.0, -75.0
 
 SYNOPTIC_API_URL = "https://api.synopticdata.com/v2/stations/timeseries"
 
-# GLOS Seagull Endpoints
-GLOS_DATASETS_URL = "https://seagull-api.glos.org/api/v1/obs-datasets.geojson"
-GLOS_OBS_URL = "https://seagull-api.glos.org/api/v1/obs-latest"
+# NWS Duluth Ship Data Endpoint
+NWS_SHIP_URL = "https://www.weather.gov/source/dlh/shipdata_world.json?r=0.1917874013826375"
 
 # Standard METAR sprite sheets via jsDelivr CDN
 WIND_BARB_ICON_URL = "http://grlevelx.redteamwx.com/10m_wind_barbs.png"
@@ -309,113 +308,84 @@ def extract_glos_param(param_obs, possible_keys):
     return None
 
 # ==========================================
-# GLOS SHIP INGESTION ROUTINE
+# NWS SHIP INGESTION ROUTINE
 # ==========================================
 def fetch_glos_ships(network_blocks, now_utc):
-    """Fetches real-time ship observations from GLOS Seagull and formats them to placefile syntax."""
-    print("Fetching live ship observations from GLOS Seagull platform...")
+    """Fetches real-time ship observations from NWS Duluth JSON endpoint and formats them to placefile syntax."""
+    print("Fetching live ship observations from NWS Duluth platform...")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*"
     }
     
-    obs_batch = {}
     try:
-        res_geo = requests.get(GLOS_DATASETS_URL, headers=headers, timeout=20)
-        print(f"GLOS API response status: GeoJSON={res_geo.status_code}")
+        res = requests.get(NWS_SHIP_URL, headers=headers, timeout=20)
+        print(f"NWS Ship API response status: {res.status_code}")
 
-        if res_geo.status_code != 200:
-            print(f"Warning: GLOS API returned status code {res_geo.status_code}. Skipping ship obs.")
+        if res.status_code != 200:
+            print(f"Warning: NWS Ship API returned status code {res.status_code}. Skipping ship obs.")
             return
 
-        geojson_data = res_geo.json()
-        
-        # Try retrieving batch observation payload
-        try:
-            res_batch = requests.get(GLOS_OBS_URL, headers=headers, timeout=20)
-            if res_batch.status_code == 200 and isinstance(res_batch.json(), dict):
-                obs_batch = res_batch.json()
-        except Exception:
-            pass
+        ship_data = res.json()
     except Exception as e:
-        print(f"Warning: Failed to fetch GLOS ship data ({e}). Skipping ship obs.")
+        print(f"Warning: Failed to fetch NWS ship data ({e}). Skipping ship obs.")
         return
 
-    features = geojson_data.get("features", [])
-    print(f"Retrieved {len(features)} total GLOS GeoJSON dataset features.")
+    vessels = ship_data if isinstance(ship_data, list) else ship_data.get("ships", ship_data.get("features", []))
+    print(f"Retrieved {len(vessels)} total ship dataset records.")
 
     ship_count = 0
-    matched_vessels = 0
     skipped_old = 0
     skipped_bbox = 0
     cutoff_time = now_utc - timedelta(hours=SHIP_LOOKBACK_HOURS)
     fmt = "%Y-%m-%dT%H:%M:%SZ"
 
-    for feature in features:
-        props = feature.get("properties", {})
-        geom = feature.get("geometry", {})
-
-        ship_name = str(props.get("name", props.get("title", props.get("label", "Unknown Vessel"))))
-        platform_type = str(props.get("platform_type", "")).lower()
-        platform_type_name = str(props.get("platform_type_name", "")).lower()
-        node_category = str(props.get("node_category", "")).lower()
-        dataset_type = str(props.get("dataset_type", "")).lower()
-        provider = str(props.get("provider", "")).lower()
-        description = str(props.get("description", "")).lower()
-
-        search_str = f"{ship_name} {platform_type} {platform_type_name} {node_category} {dataset_type} {provider} {description}".lower()
-
-        # Specifically filter for vessel / ship platforms (e.g. VOS, moving platforms, ferries, freighters)
-        is_ship = any(kw in search_str for kw in ["ship", "vessel", "vos", "freighter", "ferry", "boat", "tug", "barge", "moving", "cargo", "carrier", "glos"])
-
-        if not is_ship:
+    for vessel in vessels:
+        if not isinstance(vessel, dict):
             continue
 
-        matched_vessels += 1
+        props = vessel.get("properties", vessel)
+        geom = vessel.get("geometry", {})
 
-        if geom.get("type") != "Point" or not geom.get("coordinates"):
+        ship_name = str(props.get("name") or props.get("ship_name") or props.get("id") or props.get("callsign") or "Unknown Vessel")
+
+        # Extract coordinates
+        lat, lon = None, None
+        if geom and isinstance(geom, dict) and geom.get("coordinates"):
+            lon, lat = geom["coordinates"][0], geom["coordinates"][1]
+        else:
+            try:
+                lat = float(props.get("lat") or props.get("latitude"))
+                lon = float(props.get("lon") or props.get("longitude"))
+            except (TypeError, ValueError):
+                continue
+
+        if lat is None or lon is None:
             continue
-
-        lon, lat = geom["coordinates"][0], geom["coordinates"][1]
 
         # Bounding box filter for the Great Lakes Basin
         if not (LAT_MIN <= lat <= LAT_MAX and LON_MIN <= lon <= LON_MAX):
             skipped_bbox += 1
             continue
 
-        dataset_id = str(props.get("dataset_id") or feature.get("id") or props.get("id") or "")
-        latest = obs_batch.get(dataset_id) if dataset_id else None
-
-        if not latest and dataset_id:
-            try:
-                obs_endpoint = f"https://seagull-api.glos.org/api/v1/obs-datasets/{dataset_id}/latest"
-                res_single = requests.get(obs_endpoint, headers=headers, timeout=5)
-                if res_single.status_code == 200:
-                    latest = res_single.json()
-            except Exception:
-                pass
-
-        # Extract timestamp from latest observation object or GeoJSON properties
-        raw_time = None
-        if latest and isinstance(latest, dict):
-            raw_time = latest.get("timestamp") or latest.get("time") or latest.get("date_time")
-            if not raw_time and isinstance(latest.get("observation"), dict):
-                raw_time = latest["observation"].get("timestamp")
-
-        if not raw_time:
-            raw_time = props.get("latest_observation_at") or props.get("timestamp") or props.get("last_observation_time")
-
+        # Extract timestamp
+        raw_time = props.get("time") or props.get("timestamp") or props.get("date_time") or props.get("datetime")
         if not raw_time:
             continue
 
         try:
-            raw_time_str = str(raw_time).replace("Z", "+00:00")
-            dt_ob = datetime.fromisoformat(raw_time_str)
+            if isinstance(raw_time, (int, float)):
+                dt_ob = datetime.fromtimestamp(raw_time, tz=timezone.utc)
+            else:
+                raw_time_str = str(raw_time).replace("Z", "+00:00")
+                dt_ob = datetime.fromisoformat(raw_time_str)
+                if dt_ob.tzinfo is None:
+                    dt_ob = dt_ob.replace(tzinfo=timezone.utc)
+
             if dt_ob < cutoff_time:
                 skipped_old += 1
-                continue  # Skip observations older than the ship lookback window
+                continue
 
-            # Calculate TimeRange window for looping placefile - extended persistence up to 2.5 hours
             start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
             end_range = (dt_ob + timedelta(hours=2, minutes=30)).strftime(fmt)
             ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
@@ -423,36 +393,44 @@ def fetch_glos_ships(network_blocks, now_utc):
             print(f"Error parsing date string '{raw_time}': {e}")
             continue
 
-        param_obs = None
-        if latest and isinstance(latest, dict):
-            param_obs = latest.get("parameter_obs") or latest.get("observations") or latest.get("parameters") or latest
-        if not param_obs or not isinstance(param_obs, dict):
-            param_obs = props.get("latest_observation") or props.get("parameter_obs") or props
+        # Weather values
+        temp_f = props.get("temp") or props.get("air_temp") or props.get("temperature")
+        dew_f = props.get("dewp") or props.get("dew_point") or props.get("dewpoint")
+        speed_kt = props.get("wspd") or props.get("wind_speed") or props.get("speed")
+        gust_kt = props.get("gust") or props.get("wind_gust")
+        wind_dir = props.get("wdir") or props.get("wind_dir") or props.get("direction")
+        slp_mb = props.get("slp") or props.get("pressure") or props.get("baro")
 
-        # Extract weather parameters
-        wind_speed_raw = extract_glos_param(param_obs, ["wind_speed", "wind_speed_mps", 1, "1"])
-        wind_dir_raw = extract_glos_param(param_obs, ["wind_direction", "wind_from_direction", 2, "2"])
-        air_temp_c_raw = extract_glos_param(param_obs, ["air_temperature", "air_temp", 179, "179"])
-        dew_c_raw = extract_glos_param(param_obs, ["dew_point", "dew_point_temperature", 3, "3"])
-        rh_raw = extract_glos_param(param_obs, ["relative_humidity", 4, "4"])
-        gust_raw = extract_glos_param(param_obs, ["wind_gust", "wind_speed_of_gust", 5, "5"])
-        pressure_raw = extract_glos_param(param_obs, ["barometric_pressure", "sea_level_pressure", "air_pressure", 6, "6"])
+        try:
+            temp_f = int(round(float(temp_f))) if temp_f is not None else None
+        except (ValueError, TypeError):
+            temp_f = None
 
-        # Unit Conversions
-        temp_f = int(round((air_temp_c_raw * 9 / 5) + 32)) if air_temp_c_raw is not None else None
-        dew_f = int(round((dew_c_raw * 9 / 5) + 32)) if dew_c_raw is not None else None
-        if dew_f is None and temp_f is not None and rh_raw is not None:
-            dew_f = calculate_dewpoint_f(temp_f, rh_raw)
+        try:
+            dew_f = int(round(float(dew_f))) if dew_f is not None else None
+        except (ValueError, TypeError):
+            dew_f = None
 
-        speed_kt = int(round(wind_speed_raw * 1.94384)) if wind_speed_raw is not None else 0
-        gust_kt = int(round(gust_raw * 1.94384)) if gust_raw is not None else None
-        wind_dir = round(wind_dir_raw) if wind_dir_raw is not None else None
-        slp_mb = normalize_pressure_to_mb(pressure_raw)
+        try:
+            speed_kt = int(round(float(speed_kt))) if speed_kt is not None else 0
+        except (ValueError, TypeError):
+            speed_kt = 0
+
+        try:
+            gust_kt = int(round(float(gust_kt))) if gust_kt is not None else None
+        except (ValueError, TypeError):
+            gust_kt = None
+
+        try:
+            wind_dir = round(float(wind_dir)) if wind_dir is not None else None
+        except (ValueError, TypeError):
+            wind_dir = None
+
+        slp_mb = normalize_pressure_to_mb(slp_mb)
         slp_str = sanitize_slp(slp_mb)
 
         tf_display = f"{temp_f}" if temp_f is not None else "M"
         df_display = f"{dew_f}" if dew_f is not None else "M"
-        rh_display = f"{int(round(rh_raw))}%" if rh_raw is not None else "M"
         wind_dir_display = int(wind_dir) if wind_dir is not None else 0
 
         has_gust = (
@@ -464,7 +442,7 @@ def fetch_glos_ships(network_blocks, now_utc):
 
         hover_text = (
             f"Obs Time: {ob_time_str} | Ship: {ship_name} | Type: VOS/Freighter | "
-            f"Temp: {tf_display}F | Dewpt: {df_display}F | RH: {rh_display} | Wind: {wind_display} | "
+            f"Temp: {tf_display}F | Dewpt: {df_display}F | Wind: {wind_display} | "
             f"SLP: {f'{slp_mb:.1f}' if slp_mb else 'M'}mb"
         )
 
@@ -517,8 +495,8 @@ def fetch_glos_ships(network_blocks, now_utc):
         network_blocks.setdefault("Ships (GLOS)", []).extend(station_lines)
         ship_count += 1
 
-    print(f"GLOS inspection breakdown: {matched_vessels} matched vessel filter, {skipped_bbox} out of bbox, {skipped_old} older than cutoff.")
-    print(f"Successfully processed {ship_count} active ship observations from GLOS Seagull within the {SHIP_LOOKBACK_HOURS}-hour window.")
+    print(f"NWS Ship inspection breakdown: {skipped_bbox} out of bbox, {skipped_old} older than cutoff.")
+    print(f"Successfully processed {ship_count} active ship observations from NWS Duluth within the {SHIP_LOOKBACK_HOURS}-hour window.")
 
 # ==========================================
 # MAIN IMPLEMENTATION LOGIC
@@ -783,7 +761,7 @@ def main():
                 if station_lines:
                     network_blocks.setdefault(mnet, []).extend(station_lines)
 
-    # Ingest GLOS Ship Observations with time-series loop support
+    # Ingest Ship Observations from NWS Duluth with time-series loop support
     fetch_glos_ships(network_blocks, now_utc)
 
     header_lines = [
