@@ -1,6 +1,6 @@
 ; Created by: Bryan J. Howell and Gemini
 ; Last Updated: 10/09/26
-Title: Marine Surface Observations (2026-10-13 18:45:15 UTC)
+Title: Marine Surface Observations (2026-10-13 18:47:40 UTC)
 Refresh: 5
 IconFile: 1, 30, 30, 15, 29, "http://grlevelx.redteamwx.com/10m_wind_barbs.png"
 IconFile: 2, 15, 15, 8, 8, "https://cdn.jsdelivr.net/gh/ktrue/metar-placefile@master/cloudcover_new.png"
@@ -2419,7 +2419,7 @@ Object: 41.85600,-87.60900
   Color: 255 255 255
   Icon: 0,0,210,1,2,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-13 17:00 UTC | Station: CNII2 | Type: GLOS | Temp: 76F | Dewpt: 59F | RH: M | Wind: 210@5G10KT | Peak Gust 1hr: 13KT @ 16:45Z | Vis: N/A | SLP: Mmb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-13 17:00 UTC | Station: CNII2 | Type: GLOS | Temp: 76F | Dewpt: 59F | RH: M | Wind: 210@5G10KT | Peak Gust 1hr: 10KT @ 17:00Z | Vis: N/A | SLP: Mmb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
   Text: -16, 12, 1, "76"
   Color: 100 255 100
@@ -2433,7 +2433,7 @@ Object: 41.85600,-87.60900
   Color: 255 255 255
   Icon: 0,0,300,1,2,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-13 17:15 UTC | Station: CNII2 | Type: GLOS | Temp: 77F | Dewpt: 57F | RH: M | Wind: 300@7KT | Peak Gust 1hr: 13KT @ 16:45Z | Vis: N/A | SLP: Mmb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-13 17:15 UTC | Station: CNII2 | Type: GLOS | Temp: 77F | Dewpt: 57F | RH: M | Wind: 300@7KT | Peak Gust 1hr: 10KT @ 17:00Z | Vis: N/A | SLP: Mmb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
   Text: -16, 12, 1, "77"
   Color: 100 255 100
@@ -2445,7 +2445,7 @@ Object: 45.65800,-84.46400
   Color: 255 255 255
   Icon: 0,0,70,1,2,1.25, ""
   Color: 255 255 255
-  Icon: 0,0,0,2,5, "Obs Time: 2026-10-13 16:50 UTC | Station: CYGM4 | Type: GLOS | Temp: 54F | Dewpt: 51F | RH: M | Wind: 070@6KT | Peak Gust 1hr: 9KT @ 16:45Z | Vis: N/A | SLP: 1005.0mb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
+  Icon: 0,0,0,2,5, "Obs Time: 2026-10-13 16:50 UTC | Station: CYGM4 | Type: GLOS | Temp: 54F | Dewpt: 51F | RH: M | Wind: 070@6KT | Peak Gust 1hr: 7KT @ 16:50Z | Vis: N/A | SLP: 1005.0mb | Pres Tend: N/A | Rain 1hr: 0.00" | Rain 24hr: 0.00""
   Color: 255 100 100
   Text: -16, 12, 1, "54"
   Color: 255 255 255
