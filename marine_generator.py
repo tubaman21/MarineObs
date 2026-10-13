@@ -346,7 +346,6 @@ def fetch_glos_ships(network_blocks, now_utc):
         props = feature.get("properties", {})
         geom = feature.get("geometry", {})
 
-        # Broadened inspection across GLOS metadata fields to identify all vessel types
         ship_name = str(props.get("name", props.get("title", props.get("label", "Unknown Vessel"))))
         platform_type = str(props.get("platform_type", "")).lower()
         platform_type_name = str(props.get("platform_type_name", "")).lower()
@@ -355,9 +354,12 @@ def fetch_glos_ships(network_blocks, now_utc):
         description = str(props.get("description", "")).lower()
 
         search_str = f"{ship_name} {platform_type} {platform_type_name} {node_category} {dataset_type} {description}".lower()
-        is_ship = any(kw in search_str for kw in ["ship", "vessel", "vos", "freighter", "ferry", "boat", "tug", "barge", "moving", "glos", "buoy", "station", "marine"])
+        
+        # Explicitly target ships, VOS vessels, and moving platforms while excluding fixed buoys/land stations
+        is_ship = any(kw in search_str for kw in ["ship", "vessel", "vos", "freighter", "ferry", "boat", "tug", "barge", "moving", "cargo", "carrier"])
+        is_fixed = any(kw in search_str for kw in ["buoy", "fixed", "land", "tower", "station", "pier", "lighthouse"]) and not is_ship
 
-        if not is_ship:
+        if not is_ship or is_fixed:
             continue
 
         matched_vessels += 1
@@ -373,36 +375,33 @@ def fetch_glos_ships(network_blocks, now_utc):
             continue
 
         dataset_id = str(props.get("id", ""))
-        if not dataset_id:
-            continue
-
         latest = None
-        # Fetch latest observation individually per platform endpoint
-        try:
-            obs_endpoint = f"https://seagull-api.glos.org/api/v1/obs-datasets/{dataset_id}/latest"
-            res_single = requests.get(obs_endpoint, headers=headers, timeout=10)
-            if res_single.status_code == 200:
-                latest = res_single.json()
-        except Exception:
-            pass
 
-        if not latest or not isinstance(latest, dict):
-            continue
+        if dataset_id:
+            try:
+                obs_endpoint = f"https://seagull-api.glos.org/api/v1/obs-datasets/{dataset_id}/latest"
+                res_single = requests.get(obs_endpoint, headers=headers, timeout=10)
+                if res_single.status_code == 200:
+                    latest = res_single.json()
+            except Exception:
+                pass
 
-        # Parse observation timestamp for loop time-bounding
-        raw_time = latest.get("timestamp") or latest.get("time") or latest.get("date_time")
-        if not raw_time and "observation" in latest and isinstance(latest["observation"], dict):
-            raw_time = latest["observation"].get("timestamp")
-
-        if not raw_time:
-            # Fallback to feature property timestamp if available
-            raw_time = props.get("latest_observation_at") or props.get("timestamp")
+        # Parse observation timestamp across dataset payload and GeoJSON property fallbacks
+        raw_time = None
+        if latest and isinstance(latest, dict):
+            raw_time = latest.get("timestamp") or latest.get("time") or latest.get("date_time")
+            if not raw_time and "observation" in latest and isinstance(latest["observation"], dict):
+                raw_time = latest["observation"].get("timestamp")
 
         if not raw_time:
+            raw_time = props.get("latest_observation_at") or props.get("timestamp") or props.get("last_observation_time")
+
+        if not raw_time:
             continue
 
         try:
-            dt_ob = datetime.fromisoformat(str(raw_time).replace("Z", "+00:00"))
+            raw_time_str = str(raw_time).replace("Z", "+00:00")
+            dt_ob = datetime.fromisoformat(raw_time_str)
             if dt_ob < cutoff_time:
                 skipped_old += 1
                 continue  # Skip observations older than the ship lookback window
@@ -415,7 +414,11 @@ def fetch_glos_ships(network_blocks, now_utc):
             print(f"Error parsing date string '{raw_time}': {e}")
             continue
 
-        param_obs = latest.get("parameter_obs") or latest.get("observations") or latest.get("parameters") or latest
+        param_obs = None
+        if latest and isinstance(latest, dict):
+            param_obs = latest.get("parameter_obs") or latest.get("observations") or latest.get("parameters") or latest
+        if not param_obs:
+            param_obs = props.get("parameter_obs") or props
 
         # Extract weather parameters
         wind_speed_raw = extract_glos_param(param_obs, ["wind_speed", "wind_speed_mps", 1, "1"])
