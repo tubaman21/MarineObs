@@ -307,7 +307,10 @@ def extract_glos_param(param_obs, possible_keys):
 def fetch_glos_ships(network_blocks, now_utc):
     """Fetches real-time ship observations from GLOS Seagull and formats them to placefile syntax."""
     print("Fetching live ship observations from GLOS Seagull platform...")
-    headers = {"User-Agent": "GRLevelX-Placefile-Script/1.0"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*"
+    }
     
     try:
         res_geo = requests.get(GLOS_DATASETS_URL, headers=headers, timeout=20)
