@@ -269,7 +269,7 @@ def get_max_gust_1h(observations, target_idx, timestamps):
 
         if max_gust_ms is not None:
             max_gust_kt = int(round(max_gust_ms * 1.94384))
-            return f"{max_gust_kt}KT @ {max_gust_time_str}" if max_gust_time_str else f"{max_gust_kt}KT"
+            return f"{max_gust_kt}KT @ {max_gust_time_str}" if max_gust_time_str else f"{max_gust_kt}"
     except Exception:
         pass
 
@@ -320,8 +320,6 @@ def fetch_glos_ships(network_blocks, now_utc):
         
         # GLOS obs-latest endpoint returns HTTP 403 on GET; query using POST payload
         res_obs = requests.post(GLOS_OBS_URL, json={}, headers=headers, timeout=20)
-        if res_obs.status_code != 200:
-            res_obs = requests.get(GLOS_OBS_URL, headers=headers, timeout=20)
         
         print(f"GLOS API response status: GeoJSON={res_geo.status_code}, ObsLatest={res_obs.status_code}")
 
