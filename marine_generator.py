@@ -342,6 +342,9 @@ def fetch_glos_ships(network_blocks, now_utc):
     cutoff_time = now_utc - timedelta(hours=SHIP_LOOKBACK_HOURS)
     fmt = "%Y-%m-%dT%H:%M:%SZ"
 
+    debug_limit = 5
+    debug_count = 0
+
     for feature in features:
         props = feature.get("properties", {})
         geom = feature.get("geometry", {})
@@ -395,6 +398,10 @@ def fetch_glos_ships(network_blocks, now_utc):
 
         if not raw_time:
             raw_time = props.get("latest_observation_at") or props.get("timestamp") or props.get("last_observation_time")
+
+        if debug_count < debug_limit:
+            debug_count += 1
+            print(f"[DEBUG GLOS #{debug_count}] ID: {dataset_id} | Name: '{ship_name}' | RawTime: {raw_time} | LatestType: {type(latest)}")
 
         if not raw_time:
             continue
