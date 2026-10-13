@@ -31,11 +31,11 @@ NWS_SHIP_URL = "https://www.weather.gov/source/dlh/shipdata_world.json?r=0.19178
 WIND_BARB_ICON_URL = "http://grlevelx.redteamwx.com/10m_wind_barbs.png"
 SKY_COVER_ICON_URL = "https://cdn.jsdelivr.net/gh/ktrue/metar-placefile@master/cloudcover_new.png"
 
-# Set lookback window to 2 hours for stationary mesonet/buoy looping animation
-LOOKBACK_HOURS = 2
+# Set lookback window to 4 hours for stationary mesonet/buoy looping animation
+LOOKBACK_HOURS = 4
 
-# Dedicated lookback window for moving vessels (accounts for delayed VOS reporting intervals)
-SHIP_LOOKBACK_HOURS = 12
+# Dedicated lookback window for moving vessels (extended to 4 hours to cover 3-hour radar loops)
+SHIP_LOOKBACK_HOURS = 4
 
 NETWORK_THRESHOLDS = {
     "NDBC": 999,
@@ -340,6 +340,9 @@ def fetch_glos_ships(network_blocks, now_utc):
     cutoff_time = now_utc - timedelta(hours=SHIP_LOOKBACK_HOURS)
     fmt = "%Y-%m-%dT%H:%M:%SZ"
 
+    # Track latest timestamp per vessel to eliminate duplicate older reports
+    latest_vessel_obs = {}
+
     for vessel in vessels:
         if not isinstance(vessel, dict):
             continue
@@ -356,14 +359,12 @@ def fetch_glos_ships(network_blocks, now_utc):
                 obs_entries.append((pkey, pval))
 
         if not obs_entries:
-            # Fallback for flat dictionary formats
             obs_entries = [("flat", props)]
 
         for raw_time, obs in obs_entries:
             if not isinstance(obs, dict):
                 continue
 
-            # Extract coordinates
             lat, lon = None, None
             if "lat" in obs and "lon" in obs:
                 try:
@@ -377,16 +378,13 @@ def fetch_glos_ships(network_blocks, now_utc):
             if lat is None or lon is None:
                 continue
 
-            # Adjust Western Hemisphere positive longitude notation
             if lon > 0 and 70.0 <= lon <= 100.0:
                 lon = -lon
 
-            # Bounding box filter for the Great Lakes Basin
             if not (LAT_MIN <= lat <= LAT_MAX and LON_MIN <= lon <= LON_MAX):
                 skipped_bbox += 1
                 continue
 
-            # Parse observation timestamp
             dt_ob = None
             try:
                 time_str = str(raw_time if raw_time != "flat" else obs.get("time", "")).strip()
@@ -399,137 +397,138 @@ def fetch_glos_ships(network_blocks, now_utc):
                 if dt_ob is None or dt_ob < cutoff_time:
                     skipped_old += 1
                     continue
-
-                start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
-                end_range = (dt_ob + timedelta(hours=2, minutes=30)).strftime(fmt)
-                ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
             except Exception:
                 skipped_old += 1
                 continue
 
-            # Weather values (handles NWS V-FF wind, V-T Kelvin temp, V-SLP pressure in Pa)
-            temp_raw = obs.get("V-T") or obs.get("temp") or obs.get("air_temp")
-            dew_raw = obs.get("V-TD") or obs.get("dewp") or obs.get("dew_point")
-            speed_raw = obs.get("V-FF") or obs.get("wspd") or obs.get("wind_speed")
-            gust_raw = obs.get("gust") or obs.get("wind_gust")
-            wind_dir_raw = obs.get("V-DD") or obs.get("wdir") or obs.get("wind_dir")
-            slp_raw = obs.get("V-SLP") or obs.get("slp") or obs.get("pressure")
+            # Keep only the latest report per vessel name
+            vessel_key = ship_name.strip().upper()
+            if vessel_key in latest_vessel_obs:
+                existing_dt, _ = latest_vessel_obs[vessel_key]
+                if dt_ob <= existing_dt:
+                    continue
 
-            temp_f = None
-            if temp_raw is not None:
-                try:
-                    t_val = float(temp_raw)
-                    if t_val > 200.0:  # Kelvin to Fahrenheit
-                        temp_f = int(round((t_val - 273.15) * 9 / 5 + 32))
-                    else:
-                        temp_f = int(round(t_val))
-                except (ValueError, TypeError):
-                    pass
+            latest_vessel_obs[vessel_key] = (dt_ob, (ship_name, lat, lon, obs))
 
-            dew_f = None
-            if dew_raw is not None:
-                try:
-                    d_val = float(dew_raw)
-                    if d_val > 200.0:  # Kelvin to Fahrenheit
-                        dew_f = int(round((d_val - 273.15) * 9 / 5 + 32))
-                    else:
-                        dew_f = int(round(d_val))
-                except (ValueError, TypeError):
-                    pass
+    for dt_ob, (ship_name, lat, lon, obs) in latest_vessel_obs.values():
+        start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
+        # Extend end range through current run time + 3 hours so obs don't vanish on GR2 radar loops
+        end_range = (now_utc + timedelta(hours=3)).strftime(fmt)
+        ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
 
-            speed_kt = 0
-            if speed_raw is not None:
-                try:
-                    sp_val = float(speed_raw)
-                    if sp_val < 100.0 and obs.get("V-FF") is not None:  # m/s to knots
-                        speed_kt = int(round(sp_val * 1.94384))
-                    else:
-                        speed_kt = int(round(sp_val))
-                except (ValueError, TypeError):
-                    pass
+        temp_raw = obs.get("V-T") or obs.get("temp") or obs.get("air_temp")
+        dew_raw = obs.get("V-TD") or obs.get("dewp") or obs.get("dew_point")
+        speed_raw = obs.get("V-FF") or obs.get("wspd") or obs.get("wind_speed")
+        gust_raw = obs.get("gust") or obs.get("wind_gust")
+        wind_dir_raw = obs.get("V-DD") or obs.get("wdir") or obs.get("wind_dir")
+        slp_raw = obs.get("V-SLP") or obs.get("slp") or obs.get("pressure")
 
-            gust_kt = None
-            if gust_raw is not None:
-                try:
-                    gust_kt = int(round(float(gust_raw)))
-                except (ValueError, TypeError):
-                    pass
+        temp_f = None
+        if temp_raw is not None:
+            try:
+                t_val = float(temp_raw)
+                temp_f = int(round((t_val - 273.15) * 9 / 5 + 32)) if t_val > 200.0 else int(round(t_val))
+            except (ValueError, TypeError):
+                pass
 
-            wind_dir = None
-            if wind_dir_raw is not None:
-                try:
-                    wind_dir = round(float(wind_dir_raw))
-                except (ValueError, TypeError):
-                    pass
+        dew_f = None
+        if dew_raw is not None:
+            try:
+                d_val = float(dew_raw)
+                dew_f = int(round((d_val - 273.15) * 9 / 5 + 32)) if d_val > 200.0 else int(round(d_val))
+            except (ValueError, TypeError):
+                pass
 
-            slp_mb = normalize_pressure_to_mb(slp_raw)
-            slp_str = sanitize_slp(slp_mb)
+        speed_kt = 0
+        if speed_raw is not None:
+            try:
+                sp_val = float(speed_raw)
+                speed_kt = int(round(sp_val * 1.94384)) if (sp_val < 100.0 and obs.get("V-FF") is not None) else int(round(sp_val))
+            except (ValueError, TypeError):
+                pass
 
-            tf_display = f"{temp_f}" if temp_f is not None else "M"
-            df_display = f"{dew_f}" if dew_f is not None else "M"
-            wind_dir_display = int(wind_dir) if wind_dir is not None else 0
+        gust_kt = None
+        if gust_raw is not None:
+            try:
+                gust_kt = int(round(float(gust_raw)))
+            except (ValueError, TypeError):
+                pass
 
-            has_gust = (
-                gust_kt is not None
-                and gust_kt >= 10
-                and gust_kt > (speed_kt + 3)
-            )
-            wind_display = f"{wind_dir_display:03d}@{speed_kt}G{gust_kt}KT" if has_gust else f"{wind_dir_display:03d}@{speed_kt}KT"
+        wind_dir = None
+        if wind_dir_raw is not None:
+            try:
+                wind_dir = round(float(wind_dir_raw))
+            except (ValueError, TypeError):
+                pass
 
-            hover_text = (
-                f"Obs Time: {ob_time_str} | Ship: {ship_name} | Type: VOS/Freighter | "
-                f"Temp: {tf_display}F | Dewpt: {df_display}F | Wind: {wind_display} | "
-                f"SLP: {f'{slp_mb:.1f}' if slp_mb else 'M'}mb"
-            )
+        slp_mb = normalize_pressure_to_mb(slp_raw)
+        slp_str = sanitize_slp(slp_mb)
 
-            color_temp = "255 100 100"
-            color_dew  = "100 255 100"
-            color_slp  = "255 255 255"
-            color_gust = "255 255 0"
+        tf_display = f"{temp_f}" if temp_f is not None else "M"
+        df_display = f"{dew_f}" if dew_f is not None else "M"
+        wind_dir_display = int(wind_dir) if wind_dir is not None else 0
 
-            max_wind_kt = gust_kt if gust_kt is not None else speed_kt
-            if max_wind_kt >= 39:
-                color_temp = "255 50 255"
-            elif max_wind_kt >= 30:
-                color_temp = "255 200 0"
+        has_gust = (
+            gust_kt is not None
+            and gust_kt >= 10
+            and gust_kt > (speed_kt + 3)
+        )
+        wind_display = f"{wind_dir_display:03d}@{speed_kt}G{gust_kt}KT" if has_gust else f"{wind_dir_display:03d}@{speed_kt}KT"
 
-            station_lines = []
-            station_lines.append(f"TimeRange: {start_range} {end_range}")
-            station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
+        hover_text = (
+            f"Obs Time: {ob_time_str} | Ship: {ship_name} | Type: VOS/Freighter | "
+            f"Temp: {tf_display}F | Dewpt: {df_display}F | Wind: {wind_display} | "
+            f"SLP: {f'{slp_mb:.1f}' if slp_mb else 'M'}mb"
+        )
 
-            if speed_kt >= 3 and wind_dir is not None:
-                barb_val, rot_angle = get_wind_barb_index(speed_kt, wind_dir)
-                if barb_val > 0:
-                    station_lines.append("  Color: 255 255 255")
-                    station_lines.append(f'  Icon: 0,0,{rot_angle},1,{barb_val},1.25, ""')
+        color_temp = "255 100 100"
+        color_dew  = "100 255 100"
+        color_slp  = "255 255 255"
+        color_gust = "255 255 0"
 
-            station_lines.append("  Color: 255 255 255")
-            station_lines.append(f'  Icon: 0,0,0,2,5, "{hover_text}"')
+        max_wind_kt = gust_kt if gust_kt is not None else speed_kt
+        if max_wind_kt >= 39:
+            color_temp = "255 50 255"
+        elif max_wind_kt >= 30:
+            color_temp = "255 200 0"
 
-            if tf_display != "M":
-                station_lines.append(f"  Color: {color_temp}")
-                station_lines.append(f'  Text: -16, 12, 1, "{tf_display}"')
+        station_lines = []
+        station_lines.append(f"TimeRange: {start_range} {end_range}")
+        station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
 
-            station_lines.append("  Color: 255 200 0")
-            station_lines.append(f'  Text: 0, 22, 1, "{ship_name}"')
+        if speed_kt >= 3 and wind_dir is not None:
+            barb_val, rot_angle = get_wind_barb_index(speed_kt, wind_dir)
+            if barb_val > 0:
+                station_lines.append("  Color: 255 255 255")
+                station_lines.append(f'  Icon: 0,0,{rot_angle},1,{barb_val},1.25, ""')
 
-            if slp_str != "M":
-                station_lines.append(f"  Color: {color_slp}")
-                station_lines.append(f'  Text: 16, 12, 1, "{slp_str}"')
+        station_lines.append("  Color: 255 255 255")
+        station_lines.append(f'  Icon: 0,0,0,2,5, "{hover_text}"')
 
-            if df_display != "M":
-                station_lines.append(f"  Color: {color_dew}")
-                station_lines.append(f'  Text: -16, -12, 1, "{df_display}"')
+        if tf_display != "M":
+            station_lines.append(f"  Color: {color_temp}")
+            station_lines.append(f'  Text: -16, 12, 1, "{tf_display}"')
 
-            if has_gust:
-                station_lines.append(f"  Color: {color_gust}")
-                station_lines.append(f'  Text: 0, -20, 1, "G{gust_kt}"')
+        station_lines.append("  Color: 255 200 0")
+        station_lines.append(f'  Text: 0, 22, 1, "{ship_name}"')
 
-            station_lines.append("End:")
-            station_lines.append("")
+        if slp_str != "M":
+            station_lines.append(f"  Color: {color_slp}")
+            station_lines.append(f'  Text: 16, 12, 1, "{slp_str}"')
 
-            network_blocks.setdefault("Ships (GLOS)", []).extend(station_lines)
-            ship_count += 1
+        if df_display != "M":
+            station_lines.append(f"  Color: {color_dew}")
+            station_lines.append(f'  Text: -16, -12, 1, "{df_display}"')
+
+        if has_gust:
+            station_lines.append(f"  Color: {color_gust}")
+            station_lines.append(f'  Text: 0, -20, 1, "G{gust_kt}"')
+
+        station_lines.append("End:")
+        station_lines.append("")
+
+        network_blocks.setdefault("Ships (GLOS)", []).extend(station_lines)
+        ship_count += 1
 
     print(f"NWS Ship inspection breakdown: {skipped_bbox} out of bbox, {skipped_old} older than cutoff.")
     print(f"Successfully processed {ship_count} active ship observations from NWS Duluth within the {SHIP_LOOKBACK_HOURS}-hour window.")
@@ -644,24 +643,24 @@ def main():
             if not timestamps:
                 continue
 
-            # Iterate over EVERY timestamp in the 2-hour window for looping placefile generation
+            # Iterate over EVERY timestamp in the 4-hour window for looping placefile generation
             for idx, ts_str in enumerate(timestamps):
                 try:
                     dt_ob = datetime.strptime(ts_str, fmt).replace(tzinfo=timezone.utc)
                     
-                    # Filter observations outside the 2-hour window
+                    # Filter observations outside the 4-hour window
                     if dt_ob < cutoff_time:
                         continue
 
                     # Define start and end range for this specific observation timestamp
                     start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
                     
-                    # Compute end_range up to next observation timestamp or extend residence time up to 2.5 hours
+                    # Compute end_range up to next observation timestamp or extend through run time + 3 hours
                     if idx < len(timestamps) - 1:
                         next_dt = datetime.strptime(timestamps[idx + 1], fmt).replace(tzinfo=timezone.utc)
                         end_range = next_dt.strftime(fmt)
                     else:
-                        end_range = (dt_ob + timedelta(hours=2, minutes=30)).strftime(fmt)
+                        end_range = (now_utc + timedelta(hours=3)).strftime(fmt)
 
                     ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
                 except Exception:
