@@ -309,12 +309,19 @@ def fetch_glos_ships(network_blocks, now_utc):
     print("Fetching live ship observations from GLOS Seagull platform...")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*"
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json",
+        "Origin": "https://seagull.glos.org",
+        "Referer": "https://seagull.glos.org/"
     }
     
     try:
         res_geo = requests.get(GLOS_DATASETS_URL, headers=headers, timeout=20)
-        res_obs = requests.get(GLOS_OBS_URL, headers=headers, timeout=20)
+        
+        # GLOS obs-latest endpoint returns HTTP 403 on GET; query using POST payload
+        res_obs = requests.post(GLOS_OBS_URL, json={}, headers=headers, timeout=20)
+        if res_obs.status_code != 200:
+            res_obs = requests.get(GLOS_OBS_URL, headers=headers, timeout=20)
         
         print(f"GLOS API response status: GeoJSON={res_geo.status_code}, ObsLatest={res_obs.status_code}")
 
