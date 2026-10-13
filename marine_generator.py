@@ -313,6 +313,8 @@ def fetch_glos_ships(network_blocks, now_utc):
         res_geo = requests.get(GLOS_DATASETS_URL, headers=headers, timeout=20)
         res_obs = requests.get(GLOS_OBS_URL, headers=headers, timeout=20)
         
+        print(f"GLOS API response status: GeoJSON={res_geo.status_code}, ObsLatest={res_obs.status_code}")
+
         if res_geo.status_code != 200 or res_obs.status_code != 200:
             print(f"Warning: GLOS API returned status code {res_geo.status_code}/{res_obs.status_code}. Skipping ship obs.")
             return
@@ -324,7 +326,12 @@ def fetch_glos_ships(network_blocks, now_utc):
         return
 
     features = geojson_data.get("features", [])
+    print(f"Retrieved {len(features)} total GLOS GeoJSON dataset features.")
+
     ship_count = 0
+    matched_vessels = 0
+    skipped_old = 0
+    skipped_bbox = 0
     cutoff_time = now_utc - timedelta(hours=SHIP_LOOKBACK_HOURS)
     fmt = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -341,10 +348,12 @@ def fetch_glos_ships(network_blocks, now_utc):
         description = str(props.get("description", "")).lower()
 
         search_str = f"{ship_name} {platform_type} {platform_type_name} {node_category} {dataset_type} {description}".lower()
-        is_ship = any(kw in search_str for kw in ["ship", "vessel", "vos", "freighter", "ferry", "boat", "tug", "barge", "moving"])
+        is_ship = any(kw in search_str for kw in ["ship", "vessel", "vos", "freighter", "ferry", "boat", "tug", "barge", "moving", "glos", "buoy", "station", "marine"])
 
         if not is_ship:
             continue
+
+        matched_vessels += 1
 
         if geom.get("type") != "Point" or not geom.get("coordinates"):
             continue
@@ -353,6 +362,7 @@ def fetch_glos_ships(network_blocks, now_utc):
 
         # Bounding box filter for the Great Lakes Basin
         if not (LAT_MIN <= lat <= LAT_MAX and LON_MIN <= lon <= LON_MAX):
+            skipped_bbox += 1
             continue
 
         dataset_id = str(props.get("id", ""))
@@ -368,13 +378,15 @@ def fetch_glos_ships(network_blocks, now_utc):
         try:
             dt_ob = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
             if dt_ob < cutoff_time:
+                skipped_old += 1
                 continue  # Skip observations older than the ship lookback window
 
             # Calculate TimeRange window for looping placefile - extended persistence up to 2.5 hours
             start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
             end_range = (dt_ob + timedelta(hours=2, minutes=30)).strftime(fmt)
             ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
-        except Exception:
+        except Exception as e:
+            print(f"Error parsing date string '{raw_time}': {e}")
             continue
 
         param_obs = latest.get("parameter_obs", {})
@@ -467,6 +479,7 @@ def fetch_glos_ships(network_blocks, now_utc):
         network_blocks.setdefault("Ships (GLOS)", []).extend(station_lines)
         ship_count += 1
 
+    print(f"GLOS inspection breakdown: {matched_vessels} matched vessel filter, {skipped_bbox} out of bbox, {skipped_old} older than cutoff.")
     print(f"Successfully processed {ship_count} active ship observations from GLOS Seagull within the {SHIP_LOOKBACK_HOURS}-hour window.")
 
 # ==========================================
