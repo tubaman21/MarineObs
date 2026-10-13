@@ -330,7 +330,7 @@ def fetch_glos_ships(network_blocks, now_utc):
 
         geojson_data = res_geo.json()
         
-        # Try retrieving latest batch dataset payload
+        # Try retrieving batch observation payload
         try:
             res_batch = requests.get(GLOS_OBS_URL, headers=headers, timeout=20)
             if res_batch.status_code == 200 and isinstance(res_batch.json(), dict):
@@ -360,15 +360,15 @@ def fetch_glos_ships(network_blocks, now_utc):
         platform_type_name = str(props.get("platform_type_name", "")).lower()
         node_category = str(props.get("node_category", "")).lower()
         dataset_type = str(props.get("dataset_type", "")).lower()
-        description = str(props.get("description", "")).lower()
 
-        search_str = f"{ship_name} {platform_type} {platform_type_name} {node_category} {dataset_type} {description}".lower()
-        
-        # Strictly target vessel/ship platforms (VOS, cargo, freighter, moving ships)
-        is_ship = any(kw in search_str for kw in ["ship", "vessel", "vos", "freighter", "ferry", "boat", "tug", "barge", "moving", "cargo", "carrier"])
-        is_fixed = any(kw in search_str for kw in ["buoy", "fixed", "land", "tower", "station", "pier", "lighthouse"]) and not is_ship
+        # Specifically filter for vessel / ship platforms (e.g. VOS, moving platforms)
+        is_ship = (
+            "ship" in platform_type or "ship" in platform_type_name or "ship" in node_category
+            or "vessel" in platform_type or "vessel" in platform_type_name or "vessel" in node_category
+            or "vos" in dataset_type or "vos" in platform_type or "moving" in node_category
+        )
 
-        if not is_ship or is_fixed:
+        if not is_ship:
             continue
 
         matched_vessels += 1
@@ -383,9 +383,7 @@ def fetch_glos_ships(network_blocks, now_utc):
             skipped_bbox += 1
             continue
 
-        # Extract correct dataset_id across feature properties or top-level ID
         dataset_id = str(props.get("dataset_id") or feature.get("id") or props.get("id") or "")
-        
         latest = obs_batch.get(dataset_id) if dataset_id else None
 
         if not latest and dataset_id:
@@ -397,11 +395,11 @@ def fetch_glos_ships(network_blocks, now_utc):
             except Exception:
                 pass
 
-        # Parse observation timestamp across dataset payload and GeoJSON property fallbacks
+        # Extract timestamp from latest observation object or GeoJSON properties
         raw_time = None
         if latest and isinstance(latest, dict):
             raw_time = latest.get("timestamp") or latest.get("time") or latest.get("date_time")
-            if not raw_time and "observation" in latest and isinstance(latest["observation"], dict):
+            if not raw_time and isinstance(latest.get("observation"), dict):
                 raw_time = latest["observation"].get("timestamp")
 
         if not raw_time:
@@ -428,8 +426,8 @@ def fetch_glos_ships(network_blocks, now_utc):
         param_obs = None
         if latest and isinstance(latest, dict):
             param_obs = latest.get("parameter_obs") or latest.get("observations") or latest.get("parameters") or latest
-        if not param_obs:
-            param_obs = props.get("parameter_obs") or props
+        if not param_obs or not isinstance(param_obs, dict):
+            param_obs = props.get("latest_observation") or props.get("parameter_obs") or props
 
         # Extract weather parameters
         wind_speed_raw = extract_glos_param(param_obs, ["wind_speed", "wind_speed_mps", 1, "1"])
