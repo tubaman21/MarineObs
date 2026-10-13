@@ -34,8 +34,8 @@ SKY_COVER_ICON_URL = "https://cdn.jsdelivr.net/gh/ktrue/metar-placefile@master/c
 # Set lookback window to 2 hours for stationary mesonet/buoy looping animation
 LOOKBACK_HOURS = 2
 
-# Dedicated lookback window for moving vessels (accounts for 3-hour VOS reporting intervals)
-SHIP_LOOKBACK_HOURS = 4
+# Dedicated lookback window for moving vessels (accounts for delayed VOS reporting intervals)
+SHIP_LOOKBACK_HOURS = 12
 
 NETWORK_THRESHOLDS = {
     "NDBC": 999,
@@ -368,21 +368,40 @@ def fetch_glos_ships(network_blocks, now_utc):
             skipped_bbox += 1
             continue
 
-        # Extract timestamp
+        # Extract and robustly parse timestamp across common date formats
         raw_time = props.get("time") or props.get("timestamp") or props.get("date_time") or props.get("datetime")
         if not raw_time:
             continue
 
+        dt_ob = None
         try:
             if isinstance(raw_time, (int, float)):
-                dt_ob = datetime.fromtimestamp(raw_time, tz=timezone.utc)
+                ts_val = float(raw_time)
+                if ts_val > 1e11:  # Convert milliseconds to seconds
+                    ts_val /= 1000.0
+                dt_ob = datetime.fromtimestamp(ts_val, tz=timezone.utc)
             else:
-                raw_time_str = str(raw_time).replace("Z", "+00:00")
-                dt_ob = datetime.fromisoformat(raw_time_str)
-                if dt_ob.tzinfo is None:
-                    dt_ob = dt_ob.replace(tzinfo=timezone.utc)
+                str_time = str(raw_time).strip()
+                for time_fmt in [
+                    "%Y-%m-%d %H:%M:%S",
+                    "%Y-%m-%d %H:%M",
+                    "%Y-%m-%dT%H:%M:%SZ",
+                    "%Y-%m-%dT%H:%M:%S",
+                    "%Y/%m/%d %H:%M:%S"
+                ]:
+                    try:
+                        dt_ob = datetime.strptime(str_time, time_fmt).replace(tzinfo=timezone.utc)
+                        break
+                    except ValueError:
+                        pass
 
-            if dt_ob < cutoff_time:
+                if dt_ob is None:
+                    raw_time_str = str_time.replace("Z", "+00:00")
+                    dt_ob = datetime.fromisoformat(raw_time_str)
+                    if dt_ob.tzinfo is None:
+                        dt_ob = dt_ob.replace(tzinfo=timezone.utc)
+
+            if dt_ob is None or dt_ob < cutoff_time:
                 skipped_old += 1
                 continue
 
