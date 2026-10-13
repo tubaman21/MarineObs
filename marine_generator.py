@@ -334,6 +334,10 @@ def fetch_glos_ships(network_blocks, now_utc):
     vessels = ship_data if isinstance(ship_data, list) else ship_data.get("ships", ship_data.get("features", []))
     print(f"Retrieved {len(vessels)} total ship dataset records.")
 
+    if vessels and len(vessels) > 0:
+        sample_vessel = vessels[0]
+        print(f"[DEBUG NWS Sample Record] {json.dumps(sample_vessel)[:300]}")
+
     ship_count = 0
     skipped_old = 0
     skipped_bbox = 0
