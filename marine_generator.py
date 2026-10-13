@@ -360,13 +360,13 @@ def fetch_glos_ships(network_blocks, now_utc):
         platform_type_name = str(props.get("platform_type_name", "")).lower()
         node_category = str(props.get("node_category", "")).lower()
         dataset_type = str(props.get("dataset_type", "")).lower()
+        provider = str(props.get("provider", "")).lower()
+        description = str(props.get("description", "")).lower()
 
-        # Specifically filter for vessel / ship platforms (e.g. VOS, moving platforms)
-        is_ship = (
-            "ship" in platform_type or "ship" in platform_type_name or "ship" in node_category
-            or "vessel" in platform_type or "vessel" in platform_type_name or "vessel" in node_category
-            or "vos" in dataset_type or "vos" in platform_type or "moving" in node_category
-        )
+        search_str = f"{ship_name} {platform_type} {platform_type_name} {node_category} {dataset_type} {provider} {description}".lower()
+
+        # Specifically filter for vessel / ship platforms (e.g. VOS, moving platforms, ferries, freighters)
+        is_ship = any(kw in search_str for kw in ["ship", "vessel", "vos", "freighter", "ferry", "boat", "tug", "barge", "moving", "cargo", "carrier", "glos"])
 
         if not is_ship:
             continue
