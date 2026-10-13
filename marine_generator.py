@@ -319,6 +319,7 @@ def fetch_glos_ships(network_blocks, now_utc):
         "Accept": "application/json, text/plain, */*"
     }
     
+    obs_batch = {}
     try:
         res_geo = requests.get(GLOS_DATASETS_URL, headers=headers, timeout=20)
         print(f"GLOS API response status: GeoJSON={res_geo.status_code}")
@@ -328,6 +329,14 @@ def fetch_glos_ships(network_blocks, now_utc):
             return
 
         geojson_data = res_geo.json()
+        
+        # Try retrieving latest batch dataset payload
+        try:
+            res_batch = requests.get(GLOS_OBS_URL, headers=headers, timeout=20)
+            if res_batch.status_code == 200 and isinstance(res_batch.json(), dict):
+                obs_batch = res_batch.json()
+        except Exception:
+            pass
     except Exception as e:
         print(f"Warning: Failed to fetch GLOS ship data ({e}). Skipping ship obs.")
         return
@@ -342,9 +351,6 @@ def fetch_glos_ships(network_blocks, now_utc):
     cutoff_time = now_utc - timedelta(hours=SHIP_LOOKBACK_HOURS)
     fmt = "%Y-%m-%dT%H:%M:%SZ"
 
-    debug_limit = 5
-    debug_count = 0
-
     for feature in features:
         props = feature.get("properties", {})
         geom = feature.get("geometry", {})
@@ -358,7 +364,7 @@ def fetch_glos_ships(network_blocks, now_utc):
 
         search_str = f"{ship_name} {platform_type} {platform_type_name} {node_category} {dataset_type} {description}".lower()
         
-        # Explicitly target ships, VOS vessels, and moving platforms while excluding fixed buoys/land stations
+        # Strictly target vessel/ship platforms (VOS, cargo, freighter, moving ships)
         is_ship = any(kw in search_str for kw in ["ship", "vessel", "vos", "freighter", "ferry", "boat", "tug", "barge", "moving", "cargo", "carrier"])
         is_fixed = any(kw in search_str for kw in ["buoy", "fixed", "land", "tower", "station", "pier", "lighthouse"]) and not is_ship
 
@@ -377,13 +383,15 @@ def fetch_glos_ships(network_blocks, now_utc):
             skipped_bbox += 1
             continue
 
-        dataset_id = str(props.get("id", ""))
-        latest = None
+        # Extract correct dataset_id across feature properties or top-level ID
+        dataset_id = str(props.get("dataset_id") or feature.get("id") or props.get("id") or "")
+        
+        latest = obs_batch.get(dataset_id) if dataset_id else None
 
-        if dataset_id:
+        if not latest and dataset_id:
             try:
                 obs_endpoint = f"https://seagull-api.glos.org/api/v1/obs-datasets/{dataset_id}/latest"
-                res_single = requests.get(obs_endpoint, headers=headers, timeout=10)
+                res_single = requests.get(obs_endpoint, headers=headers, timeout=5)
                 if res_single.status_code == 200:
                     latest = res_single.json()
             except Exception:
@@ -398,10 +406,6 @@ def fetch_glos_ships(network_blocks, now_utc):
 
         if not raw_time:
             raw_time = props.get("latest_observation_at") or props.get("timestamp") or props.get("last_observation_time")
-
-        if debug_count < debug_limit:
-            debug_count += 1
-            print(f"[DEBUG GLOS #{debug_count}] ID: {dataset_id} | Name: '{ship_name}' | RawTime: {raw_time} | LatestType: {type(latest)}")
 
         if not raw_time:
             continue
