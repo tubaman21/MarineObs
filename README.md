@@ -16,7 +16,7 @@ A Python-based telemetry generator that fetches real-time marine surface observa
 ## Prerequisites
 
 - Python 3.8+
-- requests library (`pip install requests`)
+- requests library: "pip install requests"
 
 ## Environment Setup
 
@@ -37,12 +37,12 @@ Run the generator manually or set up a recurring cron job / GitHub Action (recom
 
 python marine_generator.py
 
-Upon execution, the script generates `placefiles/marine_observations.txt`.
+Upon execution, the script generates placefiles/marine_observations.txt.
 
 ## GRLevelX Configuration
 
 1. In GR2Analyst, GRLevel3, or Gibson Ridge software, open Windows > Placefiles.
-2. Add the URL pointing to your hosted `marine_observations.txt` file.
+2. Add the URL pointing to your hosted marine_observations.txt file.
 3. Set the refresh rate to 5 minutes.
 
 ## License
