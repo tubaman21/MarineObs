@@ -136,11 +136,6 @@ def sanitize_slp(pressure_mb):
     except Exception:
         return "M"
 
-def format_precip_str(precip_in):
-    if precip_in is None or math.isnan(precip_in) or precip_in < 0.01:
-        return None
-    return f"{precip_in:.2f}".lstrip('0') if precip_in < 1.0 else f"{precip_in:.2f}"
-
 def format_visibility_str(vis_val):
     if vis_val is None or math.isnan(vis_val):
         return None
@@ -274,19 +269,6 @@ def get_max_gust_1h(observations, target_idx, timestamps):
 
     return "N/A"
 
-def clean_rain_value_to_inches(val):
-    if val is None or math.isnan(val) or val < 0:
-        return 0.0
-    try:
-        val = float(val)
-        if 0.254 <= val < 100.0:
-            return val * 0.0393701
-        elif val >= 100.0:
-            return val / 100.0
-        return val
-    except Exception:
-        return 0.0
-
 def extract_glos_param(param_obs, possible_keys):
     """Extracts a value from GLOS parameter dictionary using string or integer keys."""
     if not isinstance(param_obs, dict):
@@ -340,8 +322,8 @@ def fetch_glos_ships(network_blocks, now_utc):
     cutoff_time = now_utc - timedelta(hours=SHIP_LOOKBACK_HOURS)
     fmt = "%Y-%m-%dT%H:%M:%SZ"
 
-    # Track latest timestamp per vessel to eliminate duplicate older reports
-    latest_vessel_obs = {}
+    # Allow multiple observations per vessel across the time-series window
+    ship_obs_list = []
 
     for vessel in vessels:
         if not isinstance(vessel, dict):
@@ -401,19 +383,21 @@ def fetch_glos_ships(network_blocks, now_utc):
                 skipped_old += 1
                 continue
 
-            # Keep only the latest report per vessel name
-            vessel_key = ship_name.strip().upper()
-            if vessel_key in latest_vessel_obs:
-                existing_dt, _ = latest_vessel_obs[vessel_key]
-                if dt_ob <= existing_dt:
-                    continue
+            ship_obs_list.append((dt_ob, ship_name, lat, lon, obs))
 
-            latest_vessel_obs[vessel_key] = (dt_ob, (ship_name, lat, lon, obs))
+    # Sort ship observations chronologically
+    ship_obs_list.sort(key=lambda item: item[0])
 
-    for dt_ob, (ship_name, lat, lon, obs) in latest_vessel_obs.values():
+    for i, (dt_ob, ship_name, lat, lon, obs) in enumerate(ship_obs_list):
         start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
-        # Extend end range through current run time + 3 hours so obs don't vanish on GR2 radar loops
+        
+        # Extend end_range until the next observation for this ship or run time + 3 hours
         end_range = (now_utc + timedelta(hours=3)).strftime(fmt)
+        for next_dt, next_name, _, _, _ in ship_obs_list[i + 1:]:
+            if next_name == ship_name and next_dt > dt_ob:
+                end_range = next_dt.strftime(fmt)
+                break
+
         ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
 
         temp_raw = obs.get("V-T") or obs.get("temp") or obs.get("air_temp")
@@ -584,7 +568,6 @@ def main():
 
     network_blocks = {}
     seen_stations = set()
-    rain_counter = 0
 
     if "STATION" in data and data["STATION"]:
         for station in data["STATION"]:
@@ -643,8 +626,27 @@ def main():
             if not timestamps:
                 continue
 
-            # Iterate over EVERY timestamp in the 4-hour window for looping placefile generation
+            # Select only the single most recent observation frame for all stationary stations
+            best_idx = None
+            latest_dt = None
             for idx, ts_str in enumerate(timestamps):
+                try:
+                    dt_ob = datetime.strptime(ts_str, fmt).replace(tzinfo=timezone.utc)
+                    if dt_ob >= cutoff_time:
+                        if latest_dt is None or dt_ob > latest_dt:
+                            latest_dt = dt_ob
+                            best_idx = idx
+                except Exception:
+                    continue
+
+            if best_idx is not None:
+                target_indices = [best_idx]
+            else:
+                target_indices = []
+
+            # Process single latest frame for stationary stations
+            for idx in target_indices:
+                ts_str = timestamps[idx]
                 try:
                     dt_ob = datetime.strptime(ts_str, fmt).replace(tzinfo=timezone.utc)
                     
@@ -654,13 +656,7 @@ def main():
 
                     # Define start and end range for this specific observation timestamp
                     start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
-                    
-                    # Compute end_range up to next observation timestamp or extend through run time + 3 hours
-                    if idx < len(timestamps) - 1:
-                        next_dt = datetime.strptime(timestamps[idx + 1], fmt).replace(tzinfo=timezone.utc)
-                        end_range = next_dt.strftime(fmt)
-                    else:
-                        end_range = (now_utc + timedelta(hours=3)).strftime(fmt)
+                    end_range = (now_utc + timedelta(hours=3)).strftime(fmt)
 
                     ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
                 except Exception:
@@ -688,18 +684,6 @@ def main():
                 max_gust_1h_str = get_max_gust_1h(observations, idx, timestamps)
                 vis_str = format_visibility_str(raw_vis)
 
-                raw_p1h = get_obs_val(observations, ["precip_accum_one_hour"], idx)
-                raw_p24h = get_obs_val(observations, ["precip_accum_24_hour"], idx)
-
-                p1h_in = clean_rain_value_to_inches(raw_p1h) if raw_p1h is not None else 0.0
-                p24h_in = clean_rain_value_to_inches(raw_p24h) if raw_p24h is not None else 0.0
-
-                p1h_str = format_precip_str(p1h_in)
-                p24h_str = format_precip_str(p24h_in)
-
-                if p1h_str:
-                    rain_counter += 1
-
                 sky_code = get_obs_val(observations, ["cloud_layer_1_code"], idx)
 
                 if temp_f is not None and (temp_f < -50 or temp_f > 130): temp_f = None
@@ -717,7 +701,6 @@ def main():
                 color_temp = "255 100 100"
                 color_dew  = "100 255 100"
                 color_slp  = "255 255 255"
-                color_rain = "0 255 255"
                 color_gust = "255 255 0"
 
                 max_wind_kt = gust_kt if gust_kt is not None else speed_kt
@@ -735,15 +718,13 @@ def main():
 
                 wind_display = f"{wind_dir_display:03d}@{speed_kt}G{gust_kt}KT" if has_gust else f"{wind_dir_display:03d}@{speed_kt}KT"
 
-                p1h_hover = f"{p1h_str}\"" if p1h_str else "0.00\""
-                p24h_hover = f"{p24h_str}\"" if p24h_str else "0.00\""
                 vis_hover = f"{vis_str}SM" if vis_str else "N/A"
 
                 hover_text = (
                     f"Obs Time: {ob_time_str} | Station: {stid} | Type: {mnet} | "
                     f"Temp: {tf_display}F | Dewpt: {df_display}F | RH: {rh_display} | Wind: {wind_display} | "
                     f"Peak Gust 1hr: {max_gust_1h_str} | Vis: {vis_hover} | SLP: {f'{slp_mb:.1f}' if slp_mb else 'M'}mb | "
-                    f"Pres Tend: {p_tend_str} | Rain 1hr: {p1h_hover} | Rain 24hr: {p24h_hover}"
+                    f"Pres Tend: {p_tend_str}"
                 )
 
                 station_lines = []
@@ -781,10 +762,6 @@ def main():
                 if df_display != "M":
                     station_lines.append(f"  Color: {color_dew}")
                     station_lines.append(f'  Text: -16, -12, 1, "{df_display}"')
-
-                if p1h_str:
-                    station_lines.append(f"  Color: {color_rain}")
-                    station_lines.append(f'  Text: 16, -12, 1, "{p1h_str}"')
 
                 if has_gust:
                     station_lines.append(f"  Color: {color_gust}")
@@ -838,7 +815,7 @@ def main():
         
     os.replace(temp_output_path, full_output_path)
         
-    print(f"Success! Processed looping dataset. Found {rain_counter} observation frames with measurable rainfall (>=0.01\").")
+    print(f"Success! Processed looping dataset.")
     print(f"Destination file compiled: {full_output_path}")
 
 if __name__ == "__main__":
