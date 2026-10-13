@@ -20,3 +20,32 @@ A Python-based telemetry generator that fetches real-time marine surface observa
 
 ```bash
 pip install requests
+Environment Setup
+You must set a valid Synoptic Networks API token as an environment variable before running the script:
+
+Bash
+export SYNOPTIC_API_TOKEN="your_synoptic_api_token_here"
+On Windows (Command Prompt):
+
+DOS
+set SYNOPTIC_API_TOKEN=your_synoptic_api_token_here
+On Windows (PowerShell):
+
+PowerShell
+$env:SYNOPTIC_API_TOKEN="your_synoptic_api_token_here"
+Usage
+Run the generator manually or set up a recurring cron job / GitHub Action (recommended refresh interval: 5 minutes):
+
+Bash
+python marine_generator.py
+Upon execution, the script generates placefiles/marine_observations.txt.
+
+GRLevelX Configuration
+In GR2Analyst, GRLevel3, or Gibson Ridge software, open Windows > Placefiles.
+
+Add the URL pointing to your hosted marine_observations.txt file.
+
+Set the refresh rate to 5 minutes.
+
+License
+This project is licensed under the MIT License.
