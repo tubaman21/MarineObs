@@ -309,26 +309,18 @@ def fetch_glos_ships(network_blocks, now_utc):
     print("Fetching live ship observations from GLOS Seagull platform...")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Content-Type": "application/json",
-        "Origin": "https://seagull.glos.org",
-        "Referer": "https://seagull.glos.org/"
+        "Accept": "application/json, text/plain, */*"
     }
     
     try:
         res_geo = requests.get(GLOS_DATASETS_URL, headers=headers, timeout=20)
-        
-        # GLOS obs-latest endpoint returns HTTP 403 on GET; query using POST payload
-        res_obs = requests.post(GLOS_OBS_URL, json={}, headers=headers, timeout=20)
-        
-        print(f"GLOS API response status: GeoJSON={res_geo.status_code}, ObsLatest={res_obs.status_code}")
+        print(f"GLOS API response status: GeoJSON={res_geo.status_code}")
 
-        if res_geo.status_code != 200 or res_obs.status_code != 200:
-            print(f"Warning: GLOS API returned status code {res_geo.status_code}/{res_obs.status_code}. Skipping ship obs.")
+        if res_geo.status_code != 200:
+            print(f"Warning: GLOS API returned status code {res_geo.status_code}. Skipping ship obs.")
             return
 
         geojson_data = res_geo.json()
-        obs_data = res_obs.json()
     except Exception as e:
         print(f"Warning: Failed to fetch GLOS ship data ({e}). Skipping ship obs.")
         return
@@ -374,7 +366,19 @@ def fetch_glos_ships(network_blocks, now_utc):
             continue
 
         dataset_id = str(props.get("id", ""))
-        latest = obs_data.get(dataset_id)
+        if not dataset_id:
+            continue
+
+        # Fetch latest observation individually per platform endpoint
+        try:
+            obs_endpoint = f"https://seagull-api.glos.org/api/v1/obs-datasets/{dataset_id}/latest"
+            res_single = requests.get(obs_endpoint, headers=headers, timeout=10)
+            if res_single.status_code != 200:
+                continue
+            latest = res_single.json()
+        except Exception:
+            continue
+
         if not latest or "parameter_obs" not in latest:
             continue
 
