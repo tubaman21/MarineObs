@@ -290,15 +290,22 @@ def clean_rain_value_to_inches(val):
 
 def extract_glos_param(param_obs, possible_keys):
     """Extracts a value from GLOS parameter dictionary using string or integer keys."""
+    if not isinstance(param_obs, dict):
+        return None
     for key in possible_keys:
         val_obj = param_obs.get(key) or param_obs.get(str(key))
-        if isinstance(val_obj, dict) and "value" in val_obj and val_obj["value"] is not None:
-            try:
-                fval = float(val_obj["value"])
-                if not math.isnan(fval):
-                    return fval
-            except (ValueError, TypeError):
-                continue
+        if isinstance(val_obj, dict):
+            val = val_obj.get("value")
+            if val is not None:
+                try:
+                    fval = float(val)
+                    if not math.isnan(fval):
+                        return fval
+                except (ValueError, TypeError):
+                    continue
+        elif isinstance(val_obj, (int, float)):
+            if not math.isnan(val_obj):
+                return float(val_obj)
     return None
 
 # ==========================================
@@ -369,26 +376,33 @@ def fetch_glos_ships(network_blocks, now_utc):
         if not dataset_id:
             continue
 
+        latest = None
         # Fetch latest observation individually per platform endpoint
         try:
             obs_endpoint = f"https://seagull-api.glos.org/api/v1/obs-datasets/{dataset_id}/latest"
             res_single = requests.get(obs_endpoint, headers=headers, timeout=10)
-            if res_single.status_code != 200:
-                continue
-            latest = res_single.json()
+            if res_single.status_code == 200:
+                latest = res_single.json()
         except Exception:
-            continue
+            pass
 
-        if not latest or "parameter_obs" not in latest:
+        if not latest or not isinstance(latest, dict):
             continue
 
         # Parse observation timestamp for loop time-bounding
-        raw_time = latest.get("timestamp")
+        raw_time = latest.get("timestamp") or latest.get("time") or latest.get("date_time")
+        if not raw_time and "observation" in latest and isinstance(latest["observation"], dict):
+            raw_time = latest["observation"].get("timestamp")
+
+        if not raw_time:
+            # Fallback to feature property timestamp if available
+            raw_time = props.get("latest_observation_at") or props.get("timestamp")
+
         if not raw_time:
             continue
 
         try:
-            dt_ob = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+            dt_ob = datetime.fromisoformat(str(raw_time).replace("Z", "+00:00"))
             if dt_ob < cutoff_time:
                 skipped_old += 1
                 continue  # Skip observations older than the ship lookback window
@@ -401,7 +415,7 @@ def fetch_glos_ships(network_blocks, now_utc):
             print(f"Error parsing date string '{raw_time}': {e}")
             continue
 
-        param_obs = latest.get("parameter_obs", {})
+        param_obs = latest.get("parameter_obs") or latest.get("observations") or latest.get("parameters") or latest
 
         # Extract weather parameters
         wind_speed_raw = extract_glos_param(param_obs, ["wind_speed", "wind_speed_mps", 1, "1"])
