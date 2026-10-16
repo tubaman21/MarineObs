@@ -169,24 +169,16 @@ def get_wind_barb_index(speed_knots, direction_deg):
     if speed_knots is None or speed_knots < 3 or direction_deg is None:
         return 0, 0
     idx = max(1, min(26, int(round(speed_knots / 5.0)) + 1))
-    
     rot = int(round(direction_deg))
     if rot == 0:
         rot = 360
-        
     return idx, rot
 
 def get_sky_cover_icon(cloud_cov_str):
     return 5
 
 def get_obs_val(observations, var_prefixes, index, allow_zero=True):
-    """
-    Scans all sensor sets for the target prefixes.
-    If allow_zero is False (used for wind speeds when a non-zero gust exists),
-    it ignores 0.0 readings if a positive reading exists in another sensor set.
-    """
     candidates = []
-    
     for prefix in var_prefixes:
         matching_keys = [k for k in observations.keys() if prefix in k]
         matching_keys.sort(key=lambda x: (0 if "set_1" in x or x == prefix else 1, x))
@@ -211,7 +203,6 @@ def get_obs_val(observations, var_prefixes, index, allow_zero=True):
                 except (ValueError, TypeError):
                     continue
                     
-    # Return 0.0 if no non-zero value was found across all sets
     return candidates[0] if candidates else None
 
 def get_best_slp(observations, index, elev_meters, temp_c):
@@ -295,7 +286,6 @@ def get_max_gust_1h(observations, target_idx, timestamps):
 # NWS SHIP INGESTION ROUTINE
 # ==========================================
 def fetch_glos_ships(network_blocks, now_utc):
-    """Fetches real-time ship observations from NWS Duluth JSON endpoint and formats them to placefile syntax."""
     print("Fetching live ship observations from NWS Duluth platform...")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -654,11 +644,9 @@ def main():
                 gust_ms = get_obs_val(observations, ["wind_gust"], idx)
                 gust_kt = int(round(gust_ms * 1.94384)) if gust_ms is not None else None
 
-                # Fetch wind speed, suppressing 0.0 if a gust is present and non-zero reading exists in another set
                 allow_zero_speed = True if (gust_kt is None or gust_kt < 10) else False
                 speed_ms = get_obs_val(observations, ["wind_speed", "wind_u", "wind_v"], idx, allow_zero=allow_zero_speed)
                 
-                # Extended alias check for C-MAN and NDBC direction sensors
                 wind_dir = get_obs_val(observations, ["wind_direction", "wind_dir", "wdir", "V-DD"], idx)
                 raw_vis = get_obs_val(observations, ["visibility", "vis"], idx)
 
@@ -809,5 +797,48 @@ def main():
     print(f"Success! Processed looping dataset.")
     print(f"Destination file compiled: {full_output_path}")
 
+# ==========================================
+# DIAGNOSTIC ENTRY POINT
+# ==========================================
 if __name__ == "__main__":
+    api_token = os.environ.get("SYNOPTIC_API_TOKEN")
+    if not api_token:
+        print("Error: SYNOPTIC_API_TOKEN environment variable is missing!")
+        sys.exit(1)
+
+    print("Executing station diagnostic for STDM4 and 45213...")
+    params = {
+        "token": api_token,
+        "stid": "STDM4,45213,NDBC45213",
+        "recent": 60,
+        "obtimezone": "UTC",
+        "output": "json",
+        "extra": "sensor_variables"
+    }
+
+    try:
+        res = requests.get(SYNOPTIC_API_URL, params=params, timeout=20).json()
+    except Exception as e:
+        print(f"API diagnostic call failed: {e}")
+        sys.exit(1)
+
+    stations = res.get("STATION", [])
+    if not stations:
+        print("No stations returned by Synoptic! Check token or station IDs.")
+    else:
+        for station in stations:
+            stid = station.get("STID")
+            mnet = station.get("MNET_ID")
+            print(f"\n=================== STATION: {stid} (MNET: {mnet}) ===================")
+            obs = station.get("OBSERVATIONS", {})
+            for key, vals in obs.items():
+                if any(w in key.lower() for w in ["wind", "dir", "spd", "gust", "ff", "dd", "date"]):
+                    recent_vals = vals[-3:] if isinstance(vals, list) else vals
+                    print(f"  {key:40s} -> {recent_vals}")
+
+    print("\n---------------------------------------------------------")
+    print("Diagnostic complete. Now running normal placefile compile...")
+    print("---------------------------------------------------------\n")
+    
+    # Run normal compiler routine
     main()
