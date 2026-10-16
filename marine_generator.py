@@ -391,8 +391,8 @@ def fetch_glos_ships(network_blocks, now_utc):
     for i, (dt_ob, ship_name, lat, lon, obs) in enumerate(ship_obs_list):
         start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
         
-        # Extend end_range until the next observation for this ship or run time + 3 hours
-        end_range = (now_utc + timedelta(hours=3)).strftime(fmt)
+        # Extend end_range until the next observation for this ship or 1.5 hours after dt_ob
+        end_range = (dt_ob + timedelta(hours=1.5)).strftime(fmt)
         for next_dt, next_name, _, _, _ in ship_obs_list[i + 1:]:
             if next_name == ship_name and next_dt > dt_ob:
                 end_range = next_dt.strftime(fmt)
