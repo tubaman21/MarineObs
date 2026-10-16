@@ -176,11 +176,9 @@ def get_wind_barb_index(speed_knots, direction_deg):
         return 0, 0
 
     idx = max(1, min(26, int(round(speed_knots / 5.0)) + 1))
-    
     rot = int(round(direction_deg)) % 360
     if rot == 0:
         rot = 360
-        
     return idx, rot
 
 def get_sky_cover_icon(cloud_cov_str):
@@ -390,11 +388,17 @@ def fetch_glos_ships(network_blocks, now_utc):
     for i, (dt_ob, ship_name, lat, lon, obs) in enumerate(ship_obs_list):
         start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
         
-        end_range = (dt_ob + timedelta(hours=1.5)).strftime(fmt)
-        for next_dt, next_name, _, _, _ in ship_obs_list[i + 1:]:
-            if next_name == ship_name and next_dt > dt_ob:
-                end_range = next_dt.strftime(fmt)
+        # Link end_range to next observation or extend to future placefile end cutoff
+        next_dt = None
+        for next_ob in ship_obs_list[i + 1:]:
+            if next_ob[1] == ship_name and next_ob[0] > dt_ob:
+                next_dt = next_ob[0]
                 break
+
+        if next_dt:
+            end_range = next_dt.strftime(fmt)
+        else:
+            end_range = (now_utc + timedelta(hours=3)).strftime(fmt)
 
         ob_time_str = dt_ob.strftime("%Y-%m-%d %H:%M UTC")
 
@@ -561,7 +565,6 @@ def main():
 
     stations_list = data.get("STATION", [])
     
-    # Sort stations so higher priority stations (like 45004) are processed LAST for hover focus
     stations_list.sort(
         key=lambda s: STATION_PRIORITY.get(
             s.get("STID", "").upper().replace("NDBC", ""), 50
@@ -723,7 +726,6 @@ def main():
                 station_lines.append(f"TimeRange: {start_range} {end_range}")
                 station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
 
-                # Draw wind barb ONLY if valid speed AND direction telemetry exist
                 barb_speed = max(speed_kt, gust_kt if gust_kt is not None else 0)
                 if barb_speed >= 3 and wind_dir is not None:
                     barb_val, rot_angle = get_wind_barb_index(barb_speed, wind_dir)
