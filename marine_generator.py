@@ -170,7 +170,6 @@ def get_wind_barb_index(speed_knots, direction_deg):
         return 0, 0
     idx = max(1, min(26, int(round(speed_knots / 5.0)) + 1))
     
-    # Normalize 0 degrees (North) to 360 degrees for placefile icon rotation engines
     rot = int(round(direction_deg))
     if rot == 0:
         rot = 360
@@ -180,14 +179,15 @@ def get_wind_barb_index(speed_knots, direction_deg):
 def get_sky_cover_icon(cloud_cov_str):
     return 5
 
-def get_obs_val(observations, var_prefixes, index):
+def get_obs_val(observations, var_prefixes, index, allow_zero=True):
     """
-    Retrieves observation values from Synoptic dictionary keys.
-    Prioritizes primary sensors (e.g. set_1) and iterates through all matching keys
-    until a valid non-None, non-NaN numerical value at the specified index is found.
+    Scans all sensor sets for the target prefixes.
+    If allow_zero is False (used for wind speeds when a non-zero gust exists),
+    it ignores 0.0 readings if a positive reading exists in another sensor set.
     """
+    candidates = []
+    
     for prefix in var_prefixes:
-        # Search all keys containing prefix, prioritizing set_1 or exact prefix matches first
         matching_keys = [k for k in observations.keys() if prefix in k]
         matching_keys.sort(key=lambda x: (0 if "set_1" in x or x == prefix else 1, x))
         
@@ -204,10 +204,15 @@ def get_obs_val(observations, var_prefixes, index):
                 try:
                     fval = float(val)
                     if not math.isnan(fval):
+                        if fval == 0.0 and not allow_zero:
+                            candidates.append(0.0)
+                            continue
                         return fval
                 except (ValueError, TypeError):
                     continue
-    return None
+                    
+    # Return 0.0 if no non-zero value was found across all sets
+    return candidates[0] if candidates else None
 
 def get_best_slp(observations, index, elev_meters, temp_c):
     raw_p = get_obs_val(observations, ["sea_level_pressure", "altimeter"], index)
@@ -319,7 +324,6 @@ def fetch_glos_ships(network_blocks, now_utc):
     cutoff_time = now_utc - timedelta(hours=SHIP_LOOKBACK_HOURS)
     fmt = "%Y-%m-%dT%H:%M:%SZ"
 
-    # Allow multiple observations per vessel across the time-series window
     ship_obs_list = []
 
     for vessel in vessels:
@@ -331,7 +335,6 @@ def fetch_glos_ships(network_blocks, now_utc):
 
         ship_name = str(props.get("name") or props.get("ship_name") or props.get("id") or props.get("callsign") or "Unknown Vessel")
 
-        # Iterate through nested ISO timestamp objects in properties
         obs_entries = []
         for pkey, pval in props.items():
             if isinstance(pval, dict) and ("T" in pkey or "-" in pkey):
@@ -382,13 +385,11 @@ def fetch_glos_ships(network_blocks, now_utc):
 
             ship_obs_list.append((dt_ob, ship_name, lat, lon, obs))
 
-    # Sort ship observations chronologically
     ship_obs_list.sort(key=lambda item: item[0])
 
     for i, (dt_ob, ship_name, lat, lon, obs) in enumerate(ship_obs_list):
         start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
         
-        # Extend end_range until the next observation for this ship or 1.5 hours after dt_ob
         end_range = (dt_ob + timedelta(hours=1.5)).strftime(fmt)
         for next_dt, next_name, _, _, _ in ship_obs_list[i + 1:]:
             if next_name == ship_name and next_dt > dt_ob:
@@ -477,7 +478,6 @@ def fetch_glos_ships(network_blocks, now_utc):
         station_lines.append(f"TimeRange: {start_range} {end_range}")
         station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
 
-        # Draw barb on maximum wind force if speed or gust is >= 3 kt
         barb_speed = max(speed_kt, gust_kt if gust_kt is not None else 0)
         if barb_speed >= 3 and wind_dir is not None:
             barb_val, rot_angle = get_wind_barb_index(barb_speed, wind_dir)
@@ -625,7 +625,6 @@ def main():
             if not timestamps:
                 continue
 
-            # Parse and sort all valid timestamps within the lookback window
             valid_obs = []
             for idx, ts_str in enumerate(timestamps):
                 try:
@@ -637,7 +636,6 @@ def main():
 
             valid_obs.sort(key=lambda item: item[0])
 
-            # Process all valid frames in sequence, linking each frame's end_range to the next observation
             for i, (dt_ob, idx) in enumerate(valid_obs):
                 start_range = (dt_ob - timedelta(minutes=5)).strftime(fmt)
                 
@@ -652,9 +650,16 @@ def main():
                 temp_c = get_obs_val(observations, ["air_temp"], idx)
                 dew_c = get_obs_val(observations, ["dew_point"], idx)
                 rh_pct = get_obs_val(observations, ["relative_humidity"], idx)
-                speed_ms = get_obs_val(observations, ["wind_speed"], idx)
+                
                 gust_ms = get_obs_val(observations, ["wind_gust"], idx)
-                wind_dir = get_obs_val(observations, ["wind_direction"], idx)
+                gust_kt = int(round(gust_ms * 1.94384)) if gust_ms is not None else None
+
+                # Fetch wind speed, suppressing 0.0 if a gust is present and non-zero reading exists in another set
+                allow_zero_speed = True if (gust_kt is None or gust_kt < 10) else False
+                speed_ms = get_obs_val(observations, ["wind_speed", "wind_u", "wind_v"], idx, allow_zero=allow_zero_speed)
+                
+                # Extended alias check for C-MAN and NDBC direction sensors
+                wind_dir = get_obs_val(observations, ["wind_direction", "wind_dir", "wdir", "V-DD"], idx)
                 raw_vis = get_obs_val(observations, ["visibility", "vis"], idx)
 
                 temp_f = int(round((temp_c * 9/5) + 32)) if temp_c is not None else None
@@ -664,7 +669,6 @@ def main():
                     dew_f = calculate_dewpoint_f(temp_f, rh_pct)
 
                 speed_kt = int(round(speed_ms * 1.94384)) if speed_ms is not None else 0
-                gust_kt = int(round(gust_ms * 1.94384)) if gust_ms is not None else None
 
                 slp_mb = get_best_slp(observations, idx, elev_meters, temp_c)
                 p_tend_str = get_pressure_tendency_str(observations, idx, timestamps, elev_meters, temp_c)
@@ -718,7 +722,6 @@ def main():
                 station_lines.append(f"TimeRange: {start_range} {end_range}")
                 station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
 
-                # Draw wind barb based on maximum wind force (sustained or gust)
                 barb_speed = max(speed_kt, gust_kt if gust_kt is not None else 0)
                 if barb_speed >= 3 and wind_dir is not None:
                     barb_val, rot_angle = get_wind_barb_index(barb_speed, wind_dir)
@@ -762,7 +765,6 @@ def main():
                 if station_lines:
                     network_blocks.setdefault(mnet, []).extend(station_lines)
 
-    # Ingest Ship Observations from NWS Duluth with time-series loop support
     fetch_glos_ships(network_blocks, now_utc)
 
     header_lines = [
