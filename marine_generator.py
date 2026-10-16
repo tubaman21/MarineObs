@@ -51,7 +51,7 @@ NETWORK_ORDER = ["NDBC", "GLOS", "Ships (GLOS)", "C-MAN", "NOS-WLON", "Marine"]
 
 # Priority override order for duplicate/co-located stations
 STATION_PRIORITY = {
-    "45004": 100,  # Explicitly prioritize 45004 over 45213
+    "45004": 100,  # Prioritize 45004 over 45213
     "45213": 10
 }
 
@@ -172,15 +172,15 @@ def calculate_dewpoint_f(temp_f, rh_percent):
         return None
 
 def get_wind_barb_index(speed_knots, direction_deg):
-    if speed_knots is None or speed_knots < 3:
+    if speed_knots is None or speed_knots < 3 or direction_deg is None:
         return 0, 0
-    if direction_deg is None:
-        direction_deg = 360.0
 
     idx = max(1, min(26, int(round(speed_knots / 5.0)) + 1))
-    rot = int(round(direction_deg))
+    
+    rot = int(round(direction_deg)) % 360
     if rot == 0:
         rot = 360
+        
     return idx, rot
 
 def get_sky_cover_icon(cloud_cov_str):
@@ -295,6 +295,7 @@ def get_max_gust_1h(observations, target_idx, timestamps):
 # NWS SHIP INGESTION ROUTINE
 # ==========================================
 def fetch_glos_ships(network_blocks, now_utc):
+    """Fetches real-time ship observations from NWS Duluth JSON endpoint and formats them to placefile syntax."""
     print("Fetching live ship observations from NWS Duluth platform...")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -303,6 +304,8 @@ def fetch_glos_ships(network_blocks, now_utc):
     
     try:
         res = requests.get(NWS_SHIP_URL, headers=headers, timeout=20)
+        print(f"NWS Ship API response status: {res.status_code}")
+
         if res.status_code != 200:
             print(f"Warning: NWS Ship API returned status code {res.status_code}. Skipping ship obs.")
             return
@@ -313,8 +316,11 @@ def fetch_glos_ships(network_blocks, now_utc):
         return
 
     vessels = ship_data if isinstance(ship_data, list) else ship_data.get("ships", ship_data.get("features", []))
+    print(f"Retrieved {len(vessels)} total ship dataset records.")
 
     ship_count = 0
+    skipped_old = 0
+    skipped_bbox = 0
     cutoff_time = now_utc - timedelta(hours=SHIP_LOOKBACK_HOURS)
     fmt = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -358,6 +364,7 @@ def fetch_glos_ships(network_blocks, now_utc):
                 lon = -lon
 
             if not (LAT_MIN <= lat <= LAT_MAX and LON_MIN <= lon <= LON_MAX):
+                skipped_bbox += 1
                 continue
 
             dt_ob = None
@@ -370,8 +377,10 @@ def fetch_glos_ships(network_blocks, now_utc):
                         dt_ob = dt_ob.replace(tzinfo=timezone.utc)
 
                 if dt_ob is None or dt_ob < cutoff_time:
+                    skipped_old += 1
                     continue
             except Exception:
+                skipped_old += 1
                 continue
 
             ship_obs_list.append((dt_ob, ship_name, lat, lon, obs))
@@ -446,7 +455,7 @@ def fetch_glos_ships(network_blocks, now_utc):
             and gust_kt >= 10
             and gust_kt > (speed_kt + 3)
         )
-        wind_display = f"{wind_dir_display:03d}@{speed_kt}G{gust_kt}KT" if has_gust else f"{wind_dir_display:03d}@{speed_kt}KT"
+        wind_display = f"{wind_dir_display:03d}@{speed_kt}G{gust_kt}KT" if (has_gust and wind_dir is not None) else (f"{wind_dir_display:03d}@{speed_kt}KT" if wind_dir is not None else "M")
 
         hover_text = (
             f"Obs Time: {ob_time_str} | Ship: {ship_name} | Type: VOS/Freighter | "
@@ -470,11 +479,11 @@ def fetch_glos_ships(network_blocks, now_utc):
         station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
 
         barb_speed = max(speed_kt, gust_kt if gust_kt is not None else 0)
-        if barb_speed >= 3:
+        if barb_speed >= 3 and wind_dir is not None:
             barb_val, rot_angle = get_wind_barb_index(barb_speed, wind_dir)
             if barb_val > 0:
                 station_lines.append("  Color: 255 255 255")
-                station_lines.append(f'  Icon: 0,0,{rot_angle},1,{barb_val},1.25, ""')
+                station_lines.append(f'  Icon: 0,0,{rot_angle},1,{barb_val},1.0, ""')
 
         station_lines.append("  Color: 255 255 255")
         station_lines.append(f'  Icon: 0,0,0,2,5, "{hover_text}"')
@@ -503,6 +512,9 @@ def fetch_glos_ships(network_blocks, now_utc):
 
         network_blocks.setdefault("Ships (GLOS)", []).extend(station_lines)
         ship_count += 1
+
+    print(f"NWS Ship inspection breakdown: {skipped_bbox} out of bbox, {skipped_old} older than cutoff.")
+    print(f"Successfully processed {ship_count} active ship observations from NWS Duluth within the {SHIP_LOOKBACK_HOURS}-hour window.")
 
 # ==========================================
 # MAIN IMPLEMENTATION LOGIC
@@ -549,8 +561,7 @@ def main():
 
     stations_list = data.get("STATION", [])
     
-    # Sort stations so higher priority stations (like 45004) are processed LAST
-    # In GRLevelX placefiles, the LAST written Object at identical coordinates receives hover events
+    # Sort stations so higher priority stations (like 45004) are processed LAST for hover focus
     stations_list.sort(
         key=lambda s: STATION_PRIORITY.get(
             s.get("STID", "").upper().replace("NDBC", ""), 50
@@ -674,7 +685,7 @@ def main():
                 tf_display = f"{temp_f}" if temp_f is not None else "M"
                 df_display = f"{dew_f}" if dew_f is not None else "M"
                 rh_display = f"{int(round(rh_pct))}%" if rh_pct is not None and not math.isnan(rh_pct) else "M"
-                wind_dir_display = int(wind_dir) if wind_dir is not None else 0
+                wind_dir_display = int(wind_dir) if wind_dir is not None else "M"
 
                 color_temp = "255 100 100"
                 color_dew  = "100 255 100"
@@ -694,7 +705,10 @@ def main():
                     and gust_kt > (speed_kt + 3)
                 )
 
-                wind_display = f"{wind_dir_display:03d}@{speed_kt}G{gust_kt}KT" if has_gust else f"{wind_dir_display:03d}@{speed_kt}KT"
+                if wind_dir is not None:
+                    wind_display = f"{wind_dir_display:03d}@{speed_kt}G{gust_kt}KT" if has_gust else f"{wind_dir_display:03d}@{speed_kt}KT"
+                else:
+                    wind_display = f"M@{speed_kt}G{gust_kt}KT" if has_gust else f"M@{speed_kt}KT"
 
                 vis_hover = f"{vis_str}SM" if vis_str else "N/A"
 
@@ -709,12 +723,13 @@ def main():
                 station_lines.append(f"TimeRange: {start_range} {end_range}")
                 station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
 
+                # Draw wind barb ONLY if valid speed AND direction telemetry exist
                 barb_speed = max(speed_kt, gust_kt if gust_kt is not None else 0)
-                if barb_speed >= 3:
+                if barb_speed >= 3 and wind_dir is not None:
                     barb_val, rot_angle = get_wind_barb_index(barb_speed, wind_dir)
                     if barb_val > 0:
                         station_lines.append("  Color: 255 255 255")
-                        station_lines.append(f'  Icon: 0,0,{rot_angle},1,{barb_val},1.25, ""')
+                        station_lines.append(f'  Icon: 0,0,{rot_angle},1,{barb_val},1.0, ""')
 
                 station_lines.append("  Color: 255 255 255")
                 station_lines.append(f'  Icon: 0,0,0,2,{sky_icon_idx}, "{hover_text}"')
