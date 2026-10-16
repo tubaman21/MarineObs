@@ -34,7 +34,7 @@ SKY_COVER_ICON_URL = "https://cdn.jsdelivr.net/gh/ktrue/metar-placefile@master/c
 # Set lookback window to 4 hours for stationary mesonet/buoy looping animation
 LOOKBACK_HOURS = 4
 
-# Dedicated lookback window for moving vessels (extended to 4 hours to cover 3-hour radar loops)
+# Dedicated lookback window for moving vessels
 SHIP_LOOKBACK_HOURS = 4
 
 NETWORK_THRESHOLDS = {
@@ -169,20 +169,37 @@ def get_wind_barb_index(speed_knots, direction_deg):
     if speed_knots is None or speed_knots < 3 or direction_deg is None:
         return 0, 0
     idx = max(1, min(26, int(round(speed_knots / 5.0)) + 1))
-    return idx, int(direction_deg)
+    
+    # Normalize 0 degrees (North) to 360 degrees for placefile icon rotation engines
+    rot = int(round(direction_deg))
+    if rot == 0:
+        rot = 360
+        
+    return idx, rot
 
 def get_sky_cover_icon(cloud_cov_str):
     return 5
 
 def get_obs_val(observations, var_prefixes, index):
-    for key, values in observations.items():
-        if any(prefix in key for prefix in var_prefixes):
+    """
+    Retrieves observation values from Synoptic dictionary keys.
+    Prioritizes primary sensors (e.g. set_1) and iterates through all matching keys
+    until a valid non-None, non-NaN numerical value at the specified index is found.
+    """
+    for prefix in var_prefixes:
+        # Search all keys containing prefix, prioritizing set_1 or exact prefix matches first
+        matching_keys = [k for k in observations.keys() if prefix in k]
+        matching_keys.sort(key=lambda x: (0 if "set_1" in x or x == prefix else 1, x))
+        
+        for key in matching_keys:
+            values = observations[key]
             val = None
             if isinstance(values, list):
                 if index < len(values):
                     val = values[index]
             else:
                 val = values
+                
             if val is not None:
                 try:
                     fval = float(val)
@@ -268,26 +285,6 @@ def get_max_gust_1h(observations, target_idx, timestamps):
         pass
 
     return "N/A"
-
-def extract_glos_param(param_obs, possible_keys):
-    """Extracts a value from GLOS parameter dictionary using string or integer keys."""
-    if not isinstance(param_obs, dict):
-        return None
-    for key in possible_keys:
-        val_obj = param_obs.get(key) or param_obs.get(str(key))
-        if isinstance(val_obj, dict):
-            val = val_obj.get("value")
-            if val is not None:
-                try:
-                    fval = float(val)
-                    if not math.isnan(fval):
-                        return fval
-                except (ValueError, TypeError):
-                    continue
-        elif isinstance(val_obj, (int, float)):
-            if not math.isnan(val_obj):
-                return float(val_obj)
-    return None
 
 # ==========================================
 # NWS SHIP INGESTION ROUTINE
@@ -480,8 +477,10 @@ def fetch_glos_ships(network_blocks, now_utc):
         station_lines.append(f"TimeRange: {start_range} {end_range}")
         station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
 
-        if speed_kt >= 3 and wind_dir is not None:
-            barb_val, rot_angle = get_wind_barb_index(speed_kt, wind_dir)
+        # Draw barb on maximum wind force if speed or gust is >= 3 kt
+        barb_speed = max(speed_kt, gust_kt if gust_kt is not None else 0)
+        if barb_speed >= 3 and wind_dir is not None:
+            barb_val, rot_angle = get_wind_barb_index(barb_speed, wind_dir)
             if barb_val > 0:
                 station_lines.append("  Color: 255 255 255")
                 station_lines.append(f'  Icon: 0,0,{rot_angle},1,{barb_val},1.25, ""')
@@ -719,8 +718,10 @@ def main():
                 station_lines.append(f"TimeRange: {start_range} {end_range}")
                 station_lines.append(f"Object: {lat:.5f},{lon:.5f}")
 
-                if speed_kt >= 3 and wind_dir is not None:
-                    barb_val, rot_angle = get_wind_barb_index(speed_kt, wind_dir)
+                # Draw wind barb based on maximum wind force (sustained or gust)
+                barb_speed = max(speed_kt, gust_kt if gust_kt is not None else 0)
+                if barb_speed >= 3 and wind_dir is not None:
+                    barb_val, rot_angle = get_wind_barb_index(barb_speed, wind_dir)
                     if barb_val > 0:
                         station_lines.append("  Color: 255 255 255")
                         station_lines.append(f'  Icon: 0,0,{rot_angle},1,{barb_val},1.25, ""')
